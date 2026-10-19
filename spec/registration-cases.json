@@ -1,0 +1,23 @@
+{
+  "_comment": "Shared fixtures. Java (RegistrationNormalizer), Python (fleet_worker.normalize) and TypeScript (src/lib/registration.ts) tests all load this file so the three implementations cannot drift apart.",
+  "normalize": [
+    { "input": "dl 1c ab 1234", "expected": "DL1CAB1234" },
+    { "input": "MH-12-AB-1234", "expected": "MH12AB1234" },
+    { "input": " ka.05.mn.4321 ", "expected": "KA05MN4321" },
+    { "input": "UP 16 / T 9988", "expected": "UP16T9988" },
+    { "input": "22 BH 1234 AA", "expected": "22BH1234AA" },
+    { "input": "", "expected": "" },
+    { "input": "  --  ", "expected": "" }
+  ],
+  "extract": [
+    { "input": "DL1RT1234 (CNG)", "expected": "DL1RT1234" },
+    { "input": "MH 12 AB 1234 - Ramesh", "expected": "MH12AB1234" },
+    { "input": "HR55AB0001-GPS", "expected": "HR55AB0001" },
+    { "input": "Car DL 3C AU 7788", "expected": "DL3CAU7788" },
+    { "input": "22 BH 1234 AA", "expected": "22BH1234AA" },
+    { "input": "KA01A1234", "expected": "KA01A1234" },
+    { "input": "Innova 7", "expected": null },
+    { "input": "MH12AB12345", "expected": null },
+    { "input": "", "expected": null }
+  ]
+}

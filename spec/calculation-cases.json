@@ -1,0 +1,46 @@
+{
+  "_comment": "Independently hand-calculated examples. Loaded by backend SharedSpecCasesTest. Values are strings to avoid binary floating-point.",
+  "mileage": [
+    { "energy": "CNG", "km": "250", "quantity": "10", "expected": "25.000" },
+    { "energy": "PETROL", "km": "250", "quantity": "20", "expected": "12.500" },
+    { "energy": "DIESEL", "km": "400", "quantity": "40", "expected": "10.000" },
+    { "energy": "ELECTRICITY", "km": "200", "quantity": "25", "expected": "8.000" },
+    { "energy": "PETROL", "km": "333", "quantity": "27.5", "expected": "12.109" },
+    { "energy": "CNG", "km": "100", "quantity": "0", "expected": null }
+  ],
+  "fleetWeighted": [
+    {
+      "_note": "Simple average of 25 and 10 would be 17.5; weighted is (500+100)/(20+10) = 20",
+      "intervals": [ { "km": "500", "quantity": "20" }, { "km": "100", "quantity": "10" } ],
+      "expected": "20.000"
+    }
+  ],
+  "weightedPrice": [
+    { "amount": "2100.00", "quantity": "20", "expected": "105.0000" },
+    { "amount": "1000.00", "quantity": "0", "expected": null }
+  ],
+  "costPerKm": [
+    { "amount": "2500.00", "km": "1000", "expected": "2.50" },
+    { "amount": "1234.56", "km": "789", "expected": "1.56" },
+    { "amount": "500.00", "km": "0", "expected": null }
+  ],
+  "variancePct": [
+    { "actual": "20", "expected": "25", "result": "-20.00" },
+    { "actual": "27.5", "expected": "25", "result": "10.00" }
+  ],
+  "rupees": [
+    { "amount": "1234567.891", "formatted": "₹12,34,567.89" },
+    { "amount": "999.995", "formatted": "₹1,000.00" },
+    { "amount": "-50", "formatted": "-₹50.00" },
+    { "amount": "100000", "formatted": "₹1,00,000.00" }
+  ],
+  "serviceDue": [
+    { "_note": "last service 50,000 + 10,000 interval; baseline 58,000 + 1,600 GPS km = 59,600; remaining 400 <= 500 -> DUE_SOON",
+      "lastServiceOdo": "50000", "intervalKm": 10000, "baselineKm": "58000", "gpsAfterBaseline": "1600", "dueSoonKm": 500,
+      "expectedNext": "60000.0", "expectedRemaining": "400.0", "expectedStatus": "DUE_SOON" },
+    { "lastServiceOdo": "50000", "intervalKm": 10000, "baselineKm": "59800", "gpsAfterBaseline": "350", "dueSoonKm": 500,
+      "expectedNext": "60000.0", "expectedRemaining": "-150.0", "expectedStatus": "OVERDUE" },
+    { "lastServiceOdo": "50000", "intervalKm": 10000, "baselineKm": "50000", "gpsAfterBaseline": "2000", "dueSoonKm": 500,
+      "expectedNext": "60000.0", "expectedRemaining": "8000.0", "expectedStatus": "OK" }
+  ]
+}

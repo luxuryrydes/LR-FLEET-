@@ -26,17 +26,26 @@ Render as Docker services, and Supabase provides PostgreSQL plus private file st
 4. **Vercel**: import the repo with the root directory unchanged (`vercel.json` builds `frontend/`) and set `VITE_API_BASE_URL` to the Render API URL.
 5. Sign in with the bootstrap admin, create users, and start importing.
 
-## Run locally
-```bash
-cp .env.example .env
-docker compose up --build
-```
-```bash
-cd frontend && npm install && npm run dev
-```
-Then open http://localhost:5173. The API runs on :8080, and the worker and PostgreSQL run in Docker. To try the sample files,
-run `samples/demo_seed.sql` on the test database, then import `samples/gps_daily_km_sample.xlsx`,
-`samples/fuel_format1_sample.csv` and `samples/fuel_format2_sample.xlsx`.
+## Run locally on Windows (no Docker, no PostgreSQL install)
+Double-click **`run-local.cmd`**. You need Python 3.11+ and Node.js 20+ installed. Java 21 and Maven are downloaded
+into `.tools\` automatically the first time.
+
+The launcher starts a private PostgreSQL (data kept in `data\`), the API, the import worker and the website, then
+opens http://localhost:5173.
+
+| Local sign-in | |
+|---|---|
+| Email | `admin@lrtaxi.local` |
+| Password | `Admin@12345` |
+
+These are local development defaults, created only when the database has no users. Change the password under
+**Users & roles**. To start over with an empty database, close the windows and delete the `data` folder.
+
+Try the samples: add vehicles `DL1RT1234` (CNG), `MH12AB1234` (petrol), `KA05MN4321` (CNG) and `HR26DK0002` (electric).
+Then use **Imports** with `samples/gps_daily_km_sample.xlsx`, `samples/fuel_format1_sample.csv` and
+`samples/fuel_format2_sample.xlsx`.
+
+With Docker instead: `cp .env.example .env`, run `docker compose up --build`, then `npm --prefix frontend run dev`.
 
 ## Tests
 | Suite | Command | Covers |

@@ -1,0 +1,74 @@
+spring:
+  application:
+    name: fleet-backend
+  datasource:
+    # Supabase: use the *session* pooler or direct connection (port 5432), append ?sslmode=require
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/fleet}
+    username: ${DB_USERNAME:fleet}
+    password: ${DB_PASSWORD:fleet}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      connection-init-sql: SET search_path TO fleet, public
+  flyway:
+    schemas: fleet
+    default-schema: fleet
+    create-schemas: true
+    # Never clean in any environment: data is only ever migrated forward.
+    clean-disabled: true
+  servlet:
+    multipart:
+      max-file-size: ${MAX_UPLOAD_MB:50}MB
+      max-request-size: ${MAX_UPLOAD_MB:50}MB
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+  mvc:
+    problemdetails:
+      enabled: false
+
+server:
+  port: ${PORT:8080}
+  forward-headers-strategy: framework
+  compression:
+    enabled: true
+  error:
+    include-stacktrace: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  pattern:
+    # key=value structured line; request id and user are added to the MDC by RequestLoggingFilter
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%-5level req=%X{requestId:-} user=%X{userId:-} logger=%logger{36} msg=%msg%n"
+  level:
+    root: INFO
+
+app:
+  jwt-secret: ${JWT_SECRET:}
+  jwt-ttl-minutes: ${JWT_TTL_MINUTES:480}
+  allowed-origins: ${ALLOWED_ORIGINS:http://localhost:5173}
+  login-per-minute: ${RATE_LIMIT_LOGIN_PER_MINUTE:10}
+  api-per-minute: ${RATE_LIMIT_API_PER_MINUTE:600}
+  alerts-cron: ${ALERTS_CRON:0 30 1 * * *}
+  storage:
+    type: ${STORAGE_TYPE:local}
+    local-dir: ${STORAGE_LOCAL_DIR:./data/files}
+    s3-bucket: ${S3_BUCKET:}
+    s3-endpoint: ${S3_ENDPOINT:}
+    s3-region: ${S3_REGION:ap-south-1}
+    s3-access-key: ${S3_ACCESS_KEY:}
+    s3-secret-key: ${S3_SECRET_KEY:}
+  bootstrap-admin:
+    email: ${ADMIN_EMAIL:}
+    password: ${ADMIN_PASSWORD:}
+    name: ${ADMIN_NAME:System Administrator}
