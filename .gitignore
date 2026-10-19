@@ -1,0 +1,29 @@
+# secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# build output
+node_modules/
+dist/
+target/
+*.class
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# local data and uploaded files
+data/
+*.log
+
+# editors / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+.tools/

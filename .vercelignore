@@ -1,0 +1,11 @@
+backend
+worker
+docs
+samples
+.github
+docker-compose.yml
+render.yaml
+**/node_modules
+**/.venv
+**/target
+data
