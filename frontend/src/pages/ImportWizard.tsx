@@ -7,15 +7,21 @@ import { date, dateTime, label, number } from "../lib/format";
 import { ImportPreview } from "../components/ImportPreview";
 import { Badge, Card, ErrorBox, Field, Notice, PageHeader, Spinner, Tabs } from "../components/ui";
 
-type ImportType = "GPS_KM" | "FUEL";
+type ImportType = "GPS_KM" | "FUEL" | "VEHICLE_MASTER";
 const FIELD_LABELS: Record<string, string> = {
   vehicle: "Vehicle number / GPS device name", date: "Date", km: "Distance (km)", tripStart: "Trip start time", time: "Time",
   energyType: "Fuel type", quantity: "Quantity", unitPrice: "Rate / price per unit", grossAmount: "Value (before discount)",
   discountAmount: "Discount", taxAmount: "Tax", invoiceAmount: "Invoice amount / cost", odometerKm: "Odometer",
   isFullTank: "Full tank (Y/N)", stationName: "Station / supplier", invoiceNumber: "Invoice no.", transactionRef: "Transaction no.",
   paymentMethod: "Payment method", notes: "Notes",
+  registration: "Registration no.", model: "Vehicle type / model", fuelType: "Fuel type", modelYear: "Model year",
+  operatorLabel: "Vendor / Driver (DRIVER, VENDOR, WORKSHOP…)", driverName: "Driver / vendor name", driverPhone: "Driver / vendor contact",
+  department: "Department", registrationClass: "Private / Commercial", make: "Make", category: "Category", chassisNumber: "Chassis no.",
+  engineNumber: "Engine no.", gpsDeviceName: "GPS device name", soldDate: "Sold date", soldTo: "Sold to / dealer", remarks: "Remarks",
 };
-const REQUIRED: Record<ImportType, string[]> = { GPS_KM: ["vehicle", "date", "km"], FUEL: ["vehicle", "date", "energyType", "quantity"] };
+const REQUIRED: Record<ImportType, string[]> = {
+  GPS_KM: ["vehicle", "date", "km"], FUEL: ["vehicle", "date", "energyType", "quantity"], VEHICLE_MASTER: ["registration", "model", "fuelType"],
+};
 const STEP_ORDER = ["Upload", "Map columns", "Preview & validate", "Confirm", "Summary"];
 
 function stepOf(status?: string) {
@@ -78,6 +84,7 @@ export function ImportWizardPage() {
               <select value={type} onChange={(e) => setType(e.target.value as ImportType)} aria-label="Import type">
                 <option value="GPS_KM">Daily GPS kilometres</option>
                 <option value="FUEL">Fuel / energy transactions</option>
+                <option value="VEHICLE_MASTER">Vehicle master (vehicles, drivers, vendors, departments)</option>
               </select>
             </Field>
             <Field label="File" required hint="Max 50 MB. The original file is kept in private storage.">
@@ -212,7 +219,7 @@ export function MappingStep({ b, onDone }: { b: Row; onDone: () => void }) {
   );
 }
 
-type View = "" | "VALID" | "WARNING" | "DUPLICATE" | "REJECTED";
+type View = "" | "VALID" | "WARNING" | "DUPLICATE" | "REJECTED" | "EXCLUDED";
 
 function PreviewStep({ b, onDone }: { b: Row; onDone: () => void }) {
   const { user } = useAuth();
@@ -250,6 +257,7 @@ function PreviewStep({ b, onDone }: { b: Row; onDone: () => void }) {
     { key: "WARNING" as View, label: "Warnings", count: b.warningRows },
     { key: "DUPLICATE" as View, label: "Duplicates in file", count: b.duplicateRows },
     { key: "REJECTED" as View, label: "Rejected", count: b.rejectedRows },
+    ...(b.importType === "GPS_KM" ? [{ key: "EXCLUDED" as View, label: "Not our driver (skipped)", count: b.excludedRows }] : []),
   ], [b]);
 
   return (
@@ -297,15 +305,23 @@ function PreviewStep({ b, onDone }: { b: Row; onDone: () => void }) {
           </>
         )}
         {b.importType === "FUEL" && <p>{number(importable, 0)} rows will be checked again by the server and saved. Rows identical to saved transactions are skipped.</p>}
+        {b.importType === "GPS_KM" && Number(b.excludedRows) > 0 && (
+          <Notice kind="info">{number(b.excludedRows, 0)} rows belong to vehicles that are not driven by LR's own drivers (vendor, idle, workshop or govt driver) and will not be imported.</Notice>
+        )}
+        {b.importType === "VEHICLE_MASTER" && (
+          <p>{number(importable, 0)} vehicles will be checked by the server. New registrations are added. Choose below whether vehicles already in the system are updated from the sheet. Vehicles marked sold keep their sold status.</p>
+        )}
         <div className="form-grid">
           <Field label="When a record already exists with a different value">
             <select value={policy} onChange={(e) => setPolicy(e.target.value as "SKIP" | "REPLACE")} aria-label="Duplicate policy">
-              <option value="SKIP">Keep existing record (skip)</option>
-              {can(user, "manage") && b.importType === "GPS_KM" && <option value="REPLACE">Replace existing record (keeps history)</option>}
+              <option value="SKIP">{b.importType === "VEHICLE_MASTER" ? "Add new vehicles only (keep existing unchanged)" : "Keep existing record (skip)"}</option>
+              {can(user, "manage") && b.importType !== "FUEL" && (
+                <option value="REPLACE">{b.importType === "VEHICLE_MASTER" ? "Add new and update existing vehicles from the sheet" : "Replace existing record (keeps history)"}</option>
+              )}
             </select>
           </Field>
           {policy === "REPLACE" && (
-            <Field label="Reason for replacement" required error={!reason.trim() ? "Required for an audited correction" : undefined}>
+            <Field label={b.importType === "VEHICLE_MASTER" ? "Reason for update" : "Reason for replacement"} required error={!reason.trim() ? "Required for an audited correction" : undefined}>
               <input value={reason} onChange={(e) => setReason(e.target.value)} />
             </Field>
           )}

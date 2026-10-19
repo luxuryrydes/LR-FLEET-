@@ -40,5 +40,9 @@ public record VehicleRequest(
         @DecimalMin("0") BigDecimal openingOdometerKm,
         @PastOrPresent LocalDate openingOdometerDate,
         @PastOrPresent LocalDate effectiveDate,
-        @Size(max = 300) String changeReason) {
+        @Size(max = 300) String changeReason,
+        @Pattern(regexp = "OWN_DRIVER|VENDOR|GOVT_DRIVER|OFFICER|PERSONAL|NONE") String operatorType,
+        Boolean gpsKmTracked,
+        @Pattern(regexp = "PRIVATE|COMMERCIAL") String registrationClass,
+        @Size(max = 60) String assignmentLabel) {
 }

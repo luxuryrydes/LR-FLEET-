@@ -53,6 +53,9 @@ public class ImportService {
     public static final Set<String> FUEL_FIELDS = Set.of("vehicle", "date", "time", "energyType", "quantity", "unitPrice", "grossAmount",
             "discountAmount", "taxAmount", "invoiceAmount", "odometerKm", "isFullTank", "stationName", "invoiceNumber",
             "transactionRef", "paymentMethod", "notes");
+    public static final Set<String> MASTER_FIELDS = Set.of("registration", "model", "fuelType", "modelYear", "operatorLabel", "driverName",
+            "driverPhone", "department", "registrationClass", "make", "category", "chassisNumber", "engineNumber", "gpsDeviceName",
+            "soldDate", "soldTo", "remarks");
 
     private final NamedParameterJdbcTemplate jdbc;
     private final FileService files;
@@ -62,12 +65,15 @@ public class ImportService {
     private final EfficiencyService efficiency;
     private final AlertService alerts;
     private final AuditService audit;
+    private final MasterImportService master;
     private final TransactionTemplate tx;
     private final TransactionTemplate nested;
     private final TransactionTemplate requiresNew;
 
     public ImportService(NamedParameterJdbcTemplate jdbc, FileService files, JobService jobs, GpsService gps, FuelService fuel,
-                         EfficiencyService efficiency, AlertService alerts, AuditService audit, PlatformTransactionManager tm) {
+                         EfficiencyService efficiency, AlertService alerts, AuditService audit, MasterImportService master,
+                         PlatformTransactionManager tm) {
+        this.master = master;
         this.jdbc = jdbc;
         this.files = files;
         this.jobs = jobs;
@@ -87,8 +93,8 @@ public class ImportService {
 
     @Transactional
     public Map<String, Object> upload(MultipartFile file, String type) {
-        if (!"GPS_KM".equals(type) && !"FUEL".equals(type)) {
-            throw ApiException.badRequest("INVALID_TYPE", "Import type must be GPS_KM or FUEL");
+        if (!Set.of("GPS_KM", "FUEL", "VEHICLE_MASTER").contains(type)) {
+            throw ApiException.badRequest("INVALID_TYPE", "Import type must be GPS_KM, FUEL or VEHICLE_MASTER");
         }
         FileService.StoredFile f = files.store(file, "IMPORT");
         Long id = jdbc.queryForObject("""
@@ -132,7 +138,7 @@ public class ImportService {
         Long total = jdbc.queryForObject("SELECT count(*) FROM import_batches b" + w, p, Long.class);
         List<Map<String, Object>> items = jdbc.query("""
                 SELECT b.id, b.import_type, b.original_filename, b.status, b.total_rows, b.valid_rows, b.warning_rows, b.rejected_rows,
-                       b.duplicate_rows, b.inserted_rows, b.replaced_rows, b.skipped_rows, b.duplicate_policy, b.error_message,
+                       b.duplicate_rows, b.excluded_rows, b.inserted_rows, b.replaced_rows, b.skipped_rows, b.duplicate_policy, b.error_message,
                        b.created_at, b.committed_at, u.full_name AS created_by_name
                 FROM import_batches b LEFT JOIN users u ON u.id = b.created_by""" + w + paging.sql(), p, Rows::map);
         return new PageResult<>(items, total == null ? 0 : total, paging.page(), paging.size());
@@ -150,13 +156,21 @@ public class ImportService {
         }
         String type = (String) b.get("import_type");
         Map<String, String> mapping = req.mapping() == null ? Map.of() : req.mapping();
-        Set<String> allowed = "GPS_KM".equals(type) ? GPS_FIELDS : FUEL_FIELDS;
+        Set<String> allowed = switch (type) {
+            case "GPS_KM" -> GPS_FIELDS;
+            case "FUEL" -> FUEL_FIELDS;
+            default -> MASTER_FIELDS;
+        };
         for (String k : mapping.keySet()) {
             if (!allowed.contains(k)) {
                 throw ApiException.badRequest("UNKNOWN_FIELD", "Unknown target field '" + k + "'");
             }
         }
-        List<String> required = "GPS_KM".equals(type) ? List.of("vehicle", "date", "km") : List.of("vehicle", "date", "energyType", "quantity");
+        List<String> required = switch (type) {
+            case "GPS_KM" -> List.of("vehicle", "date", "km");
+            case "FUEL" -> List.of("vehicle", "date", "energyType", "quantity");
+            default -> List.of("registration", "model", "fuelType");
+        };
         for (String r : required) {
             if (mapping.get(r) == null || mapping.get(r).isBlank()) {
                 throw ApiException.badRequest("MAPPING_INCOMPLETE", "Please map a column to '" + r + "'");
@@ -172,7 +186,7 @@ public class ImportService {
                 throw ApiException.badRequest("MAPPING_INCOMPLETE", "Trip files need the trip start timestamp column");
             }
             options.put("recordMode", mode);
-        } else if (mapping.get("invoiceAmount") == null && mapping.get("grossAmount") == null && mapping.get("unitPrice") == null) {
+        } else if ("FUEL".equals(type) && mapping.get("invoiceAmount") == null && mapping.get("grossAmount") == null && mapping.get("unitPrice") == null) {
             throw ApiException.badRequest("MAPPING_INCOMPLETE", "Map at least one amount column: invoice amount, value/gross or unit price");
         }
         if (req.sheet() == null || req.sheet().isBlank()) {
@@ -183,7 +197,7 @@ public class ImportService {
         jdbc.update("""
                 UPDATE import_batches SET selected_sheet = :sheet, header_row = :hr, column_mapping = CAST(:map AS jsonb),
                     options = CAST(:opt AS jsonb), status = 'PARSE_PENDING', total_rows = 0, valid_rows = 0, warning_rows = 0,
-                    rejected_rows = 0, duplicate_rows = 0, existing_conflict_rows = 0, error_message = NULL, updated_at = now()
+                    rejected_rows = 0, duplicate_rows = 0, existing_conflict_rows = 0, excluded_rows = 0, error_message = NULL, updated_at = now()
                 WHERE id = :id""",
                 new MapSqlParameterSource("sheet", req.sheet()).addValue("hr", req.headerRow() == null ? 1 : req.headerRow())
                         .addValue("map", Json.write(mapping)).addValue("opt", Json.write(options)).addValue("id", id));
@@ -289,6 +303,9 @@ public class ImportService {
         out.put("identicalExistingDays", same);
         out.put("existingConflictDays", conflicts);
         out.put("inFileConflictDays", dayConflicts);
+        out.put("excludedRows", jdbc.queryForObject("""
+                SELECT count(*) FROM import_staging_rows s JOIN vehicles v ON v.id = s.vehicle_id
+                WHERE s.batch_id = :id AND s.status <> 'REJECTED' AND (s.status = 'EXCLUDED' OR NOT v.gps_km_tracked)""", Map.of("id", id), Integer.class));
         out.put("existingConflicts", conflictList);
         return out;
     }
@@ -299,7 +316,7 @@ public class ImportService {
                 SELECT g.vehicle_id, g.km_date, g.distance_km FROM gps_daily_km g
                 WHERE g.is_current AND (g.vehicle_id, g.km_date) IN (
                     SELECT DISTINCT s.vehicle_id, s.record_date FROM import_staging_rows s
-                    WHERE s.batch_id = :id AND s.status <> 'REJECTED' AND s.vehicle_id IS NOT NULL)""",
+                    WHERE s.batch_id = :id AND s.status NOT IN ('REJECTED', 'EXCLUDED') AND s.vehicle_id IS NOT NULL)""",
                 Map.of("id", batchId), rs -> {
                     m.put(rs.getLong(1) + "|" + rs.getDate(2).toLocalDate(), rs.getBigDecimal(3));
                 });
@@ -345,8 +362,10 @@ public class ImportService {
         int[] counts;
         if ("GPS_KM".equals(b.get("import_type"))) {
             counts = commitGps(id, b, replace, reason, touched);
-        } else {
+        } else if ("FUEL".equals(b.get("import_type"))) {
             counts = commitFuel(id, touched);
+        } else {
+            counts = master.commit(id, replace, reason, (row, field, code, message, raw) -> rowError(id, row, field, code, message, raw));
         }
         efficiency.recomputeAll(touched);
         jdbc.update("""
@@ -365,6 +384,11 @@ public class ImportService {
     private int[] commitGps(long id, Map<String, Object> b, boolean replace, String reason, Set<Long> touched) {
         GpsDailyDedup.Mode mode = mode(b);
         Map<Integer, String> deviceByRow = new HashMap<>();
+        // GPS km are imported only for vehicles driven by LR's own drivers (vehicles.gps_km_tracked).
+        Integer excluded = jdbc.queryForObject("""
+                SELECT count(*) FROM import_staging_rows s JOIN vehicles v ON v.id = s.vehicle_id
+                WHERE s.batch_id = :id AND s.status <> 'REJECTED' AND (s.status = 'EXCLUDED' OR NOT v.gps_km_tracked)""", Map.of("id", id), Integer.class);
+        jdbc.update("UPDATE import_batches SET excluded_rows = :n WHERE id = :id", Map.of("n", excluded == null ? 0 : excluded, "id", id));
         jdbc.query("SELECT row_number, parsed->>'vehicleRaw' FROM import_staging_rows WHERE batch_id = :id AND status <> 'REJECTED'",
                 Map.of("id", id), rs -> {
                     deviceByRow.put(rs.getInt(1), rs.getString(2));
@@ -460,8 +484,9 @@ public class ImportService {
     private List<GpsDailyDedup.Row> gpsRows(long batchId) {
         return jdbc.query("""
                 SELECT row_number, vehicle_id, record_date, parsed->>'km' AS km, parsed->>'tripStart' AS trip_start
-                FROM import_staging_rows
-                WHERE batch_id = :id AND status <> 'REJECTED' AND vehicle_id IS NOT NULL AND record_date IS NOT NULL
+                FROM import_staging_rows s
+                WHERE batch_id = :id AND status NOT IN ('REJECTED', 'EXCLUDED') AND vehicle_id IS NOT NULL AND record_date IS NOT NULL
+                  AND vehicle_id IN (SELECT id FROM vehicles WHERE gps_km_tracked)
                 ORDER BY row_number""", Map.of("id", batchId),
                 (rs, i) -> new GpsDailyDedup.Row(rs.getInt("row_number"), rs.getLong("vehicle_id"), rs.getDate("record_date").toLocalDate(),
                         new BigDecimal(rs.getString("km")), rs.getString("trip_start")));

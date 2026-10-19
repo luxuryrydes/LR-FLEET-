@@ -17,7 +17,7 @@ from psycopg.types.json import Jsonb
 
 from .config import Config
 from .excel import FileFormatError, describe_file, read_rows
-from .parsers import ParseResult, VehicleIndex, parse_fuel, parse_gps
+from .parsers import ParseResult, VehicleIndex, parse_fuel, parse_gps, parse_master
 from .reconcile import reconcile, write_workbook
 from .storage import Storage
 
@@ -157,18 +157,22 @@ def detect_headers(conn: psycopg.Connection, storage: Storage, batch_id: int) ->
 
 def load_vehicle_index(conn: psycopg.Connection) -> VehicleIndex:
     with conn.cursor() as cur:
-        cur.execute("SELECT id, registration_normalized, fuel_type FROM vehicles WHERE status NOT IN ('SOLD', 'SCRAPPED')")
+        cur.execute("""SELECT id, registration_normalized, fuel_type, gps_km_tracked FROM vehicles
+                       WHERE status NOT IN ('SOLD', 'SCRAPPED')""")
         by_reg: dict[str, int] = {}
         ambiguous: set[str] = set()
         fuel: dict[int, str] = {}
+        tracked: set[int] = set()
         for r in cur.fetchall():
             fuel[r["id"]] = r["fuel_type"]
+            if r["gps_km_tracked"]:
+                tracked.add(r["id"])
             if r["registration_normalized"] in by_reg:
                 ambiguous.add(r["registration_normalized"])
             by_reg[r["registration_normalized"]] = r["id"]
         cur.execute("SELECT alias_normalized, vehicle_id FROM vehicle_aliases")
         aliases = {r["alias_normalized"]: r["vehicle_id"] for r in cur.fetchall()}
-    return VehicleIndex(by_reg=by_reg, fuel_type=fuel, by_alias=aliases, ambiguous=ambiguous)
+    return VehicleIndex(by_reg=by_reg, fuel_type=fuel, by_alias=aliases, ambiguous=ambiguous, gps_tracked=tracked)
 
 
 def load_settings(conn: psycopg.Connection) -> dict:
@@ -186,10 +190,8 @@ def parse_import(conn: psycopg.Connection, storage: Storage, batch_id: int) -> d
     index = load_vehicle_index(conn)
     settings = load_settings(conn)
     today = date.today()
-    if b["import_type"] == "GPS_KM":
-        result = parse_gps(rows, b["header_row"] or 1, mapping, options, index, settings, today)
-    else:
-        result = parse_fuel(rows, b["header_row"] or 1, mapping, options, index, settings, today)
+    parser = {"GPS_KM": parse_gps, "FUEL": parse_fuel, "VEHICLE_MASTER": parse_master}[b["import_type"]]
+    result = parser(rows, b["header_row"] or 1, mapping, options, index, settings, today)
     save_staging(conn, batch_id, result)
     conn.commit()
     return {"batchId": batch_id, **result.counts()}
@@ -217,8 +219,8 @@ def save_staging(conn: psycopg.Connection, batch_id: int, result: ParseResult) -
         c = result.counts()
         cur.execute("""
             UPDATE import_batches SET status = 'PARSED', total_rows = %s, valid_rows = %s, warning_rows = %s, rejected_rows = %s,
-                   duplicate_rows = %s, error_message = NULL, updated_at = now()
-            WHERE id = %s""", (c["total"], c["VALID"], c["WARNING"], c["REJECTED"], c["DUPLICATE"], batch_id))
+                   duplicate_rows = %s, excluded_rows = %s, error_message = NULL, updated_at = now()
+            WHERE id = %s""", (c["total"], c["VALID"], c["WARNING"], c["REJECTED"], c["DUPLICATE"], c["EXCLUDED"], batch_id))
 
 
 # ---------------------------------------------------------------------------------------------- analytics job

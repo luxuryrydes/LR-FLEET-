@@ -29,6 +29,8 @@ public class VehicleService {
                    v.current_department_id, dp.name AS department_name, v.customer_name, v.status,
                    v.expected_mileage, v.service_interval_km, v.service_interval_months, v.tank_capacity, v.battery_capacity_kwh,
                    v.purchase_date, v.purchase_cost, v.chassis_number, v.engine_number, v.gps_device_name, v.remarks,
+                   v.operator_type, v.assignment_label, v.gps_km_tracked, v.registration_class,
+                   v.disposal_type, v.disposal_date, v.disposal_party, v.disposal_amount, v.disposal_remarks,
                    v.deactivated_at, v.created_at, v.updated_at
             FROM vehicles v
             LEFT JOIN vendors vd ON vd.id = v.vendor_id
@@ -99,15 +101,17 @@ public class VehicleService {
                 INSERT INTO vehicles (registration_number, registration_normalized, duplicate_registration_reason, make, model, model_year,
                     fuel_type, category_code, ownership_type, vendor_id, current_driver_id, current_department_id, customer_name, status,
                     expected_mileage, service_interval_km, service_interval_months, tank_capacity, battery_capacity_kwh, purchase_date,
-                    purchase_cost, chassis_number, engine_number, gps_device_name, remarks, created_by, updated_by)
+                    purchase_cost, chassis_number, engine_number, gps_device_name, remarks, operator_type, gps_km_tracked, registration_class,
+                    assignment_label, created_by, updated_by)
                 VALUES (:reg, :norm, :dupReason, :make, :model, :year, :fuel, :category, :ownership, :vendor, :driver, :dept, :customer,
                     :status, :expected, :intervalKm, :intervalMonths, :tank, :battery, :purchaseDate, :purchaseCost, :chassis, :engine,
-                    :gps, :remarks, :uid, :uid)
+                    :gps, :remarks, :operator, :tracked, :regClass, :label, :uid, :uid)
                 RETURNING id""", p, Long.class);
         LocalDate eff = r.effectiveDate() != null ? r.effectiveDate() : LocalDate.now();
         String reason = r.changeReason() == null ? "Vehicle created" : r.changeReason();
         assign(id, "STATUS", null, null, null, r.status() == null ? "ACTIVE" : r.status(), eff, reason);
         assign(id, "OWNERSHIP", null, null, null, r.ownershipType(), eff, reason);
+        assign(id, "OPERATOR", null, null, null, r.operatorType() == null ? "OWN_DRIVER" : r.operatorType(), eff, reason);
         if (r.currentDriverId() != null) {
             assign(id, "DRIVER", r.currentDriverId(), null, null, null, eff, reason);
         }
@@ -142,6 +146,19 @@ public class VehicleService {
             throw ApiException.forbidden("Only a manager can deactivate, sell or scrap a vehicle");
         }
         MapSqlParameterSource p = params(r, norm).addValue("id", id).addValue("uid", CurrentUser.idOrNull()).addValue("status", status);
+        // Fields not sent by the caller keep their current values.
+        if (r.operatorType() == null) {
+            p.addValue("operator", before.get("operatorType"));
+        }
+        if (r.gpsKmTracked() == null) {
+            p.addValue("tracked", r.operatorType() == null ? before.get("gpsKmTracked") : "OWN_DRIVER".equals(r.operatorType()));
+        }
+        if (r.registrationClass() == null) {
+            p.addValue("regClass", before.get("registrationClass"));
+        }
+        if (r.assignmentLabel() == null) {
+            p.addValue("label", before.get("assignmentLabel"));
+        }
         jdbc.update("""
                 UPDATE vehicles SET registration_number = :reg, registration_normalized = :norm, duplicate_registration_reason = :dupReason,
                     make = :make, model = :model, model_year = :year, fuel_type = :fuel, category_code = :category, ownership_type = :ownership,
@@ -149,6 +166,7 @@ public class VehicleService {
                     expected_mileage = :expected, service_interval_km = :intervalKm, service_interval_months = :intervalMonths,
                     tank_capacity = :tank, battery_capacity_kwh = :battery, purchase_date = :purchaseDate, purchase_cost = :purchaseCost,
                     chassis_number = :chassis, engine_number = :engine, gps_device_name = :gps, remarks = :remarks,
+                    operator_type = :operator, gps_km_tracked = :tracked, registration_class = :regClass, assignment_label = :label,
                     deactivated_at = CASE WHEN :status IN ('INACTIVE','SOLD','SCRAPPED') THEN coalesce(deactivated_at, now()) ELSE NULL END,
                     updated_by = :uid, updated_at = now()
                 WHERE id = :id""", p);
@@ -160,6 +178,9 @@ public class VehicleService {
         }
         if (!Objects.equals(r.ownershipType(), before.get("ownershipType"))) {
             assign(id, "OWNERSHIP", null, null, null, r.ownershipType(), eff, reason);
+        }
+        if (r.operatorType() != null && !Objects.equals(r.operatorType(), before.get("operatorType"))) {
+            assign(id, "OPERATOR", null, null, null, r.operatorType(), eff, reason);
         }
         if (!Objects.equals(r.currentDriverId(), asLong(before.get("currentDriverId")))) {
             assign(id, "DRIVER", r.currentDriverId(), null, null, null, eff, reason);
@@ -186,6 +207,62 @@ public class VehicleService {
                 new MapSqlParameterSource("id", id).addValue("uid", CurrentUser.idOrNull()));
         assign(id, "STATUS", null, null, null, "INACTIVE", LocalDate.now(), reason);
         audit.record("DEACTIVATE", "VEHICLE", id, before, get(id));
+    }
+
+    public record Disposal(String type, LocalDate date, String party, java.math.BigDecimal amount, String remarks) {
+    }
+
+    /**
+     * Marks a vehicle as sold / scrapped / returned / transferred. History is kept; the vehicle leaves active counts,
+     * GPS km imports and alerts. SOLD -> status SOLD, SCRAPPED -> SCRAPPED, others -> INACTIVE.
+     */
+    @Transactional
+    public void dispose(long id, Disposal d) {
+        Map<String, Object> before = get(id);
+        if (d.date() == null || d.date().isAfter(LocalDate.now())) {
+            throw ApiException.badRequest("INVALID_DATE", "Enter the disposal date (not in the future)");
+        }
+        if ("SOLD".equals(d.type()) && (d.party() == null || d.party().isBlank())) {
+            throw ApiException.badRequest("DEALER_REQUIRED", "Enter the dealer or buyer the vehicle was sold to");
+        }
+        String status = switch (d.type()) {
+            case "SOLD" -> "SOLD";
+            case "SCRAPPED" -> "SCRAPPED";
+            case "RETURNED_TO_VENDOR", "TRANSFERRED", "OTHER" -> "INACTIVE";
+            default -> throw ApiException.badRequest("INVALID_TYPE", "Unknown disposal type " + d.type());
+        };
+        jdbc.update("""
+                UPDATE vehicles SET status = :s, disposal_type = :t, disposal_date = :d, disposal_party = :party, disposal_amount = :amt,
+                    disposal_remarks = :rem, gps_km_tracked = FALSE, deactivated_at = coalesce(deactivated_at, now()),
+                    updated_by = :uid, updated_at = now()
+                WHERE id = :id""",
+                new MapSqlParameterSource("s", status).addValue("t", d.type()).addValue("d", d.date()).addValue("party", blankToNull(d.party()))
+                        .addValue("amt", d.amount()).addValue("rem", blankToNull(d.remarks())).addValue("uid", CurrentUser.idOrNull())
+                        .addValue("id", id));
+        String reason = label(d.type()) + (d.party() == null || d.party().isBlank() ? "" : " to " + d.party().trim())
+                + (d.remarks() == null || d.remarks().isBlank() ? "" : " - " + d.remarks().trim());
+        assign(id, "STATUS", null, null, null, status, d.date(), reason.length() > 300 ? reason.substring(0, 300) : reason);
+        audit.record("DISPOSE", "VEHICLE", id, before, get(id));
+    }
+
+    /** Reverses a disposal recorded by mistake; the vehicle returns as IDLE. */
+    @Transactional
+    public void undoDisposal(long id, String reason) {
+        Map<String, Object> before = get(id);
+        if (before.get("disposalType") == null) {
+            throw ApiException.badRequest("NOT_DISPOSED", "This vehicle has no disposal to undo");
+        }
+        jdbc.update("""
+                UPDATE vehicles SET status = 'IDLE', disposal_type = NULL, disposal_date = NULL, disposal_party = NULL, disposal_amount = NULL,
+                    disposal_remarks = NULL, deactivated_at = NULL, gps_km_tracked = (operator_type = 'OWN_DRIVER' AND current_driver_id IS NOT NULL),
+                    updated_by = :uid, updated_at = now()
+                WHERE id = :id""", new MapSqlParameterSource("uid", CurrentUser.idOrNull()).addValue("id", id));
+        assign(id, "STATUS", null, null, null, "IDLE", LocalDate.now(), "Disposal reversed: " + reason);
+        audit.record("UNDO_DISPOSAL", "VEHICLE", id, before, get(id));
+    }
+
+    private static String label(String code) {
+        return code == null ? "" : code.charAt(0) + code.substring(1).toLowerCase().replace('_', ' ');
     }
 
     /** Closes the open assignment of this type and opens a new one (effective-dated history). Null value = unassigned. */
@@ -302,7 +379,11 @@ public class VehicleService {
                 .addValue("chassis", blankToNull(r.chassisNumber()))
                 .addValue("engine", blankToNull(r.engineNumber()))
                 .addValue("gps", blankToNull(r.gpsDeviceName()))
-                .addValue("remarks", blankToNull(r.remarks()));
+                .addValue("remarks", blankToNull(r.remarks()))
+                .addValue("operator", r.operatorType() == null ? "OWN_DRIVER" : r.operatorType())
+                .addValue("tracked", r.gpsKmTracked() == null ? "OWN_DRIVER".equals(r.operatorType() == null ? "OWN_DRIVER" : r.operatorType()) : r.gpsKmTracked())
+                .addValue("regClass", r.registrationClass())
+                .addValue("label", blankToNull(r.assignmentLabel()));
     }
 
     static String blankToNull(String s) {

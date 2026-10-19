@@ -41,6 +41,10 @@ opens http://localhost:5173.
 These are local development defaults, created only when the database has no users. Change the password under
 **Users & roles**. To start over with an empty database, close the windows and delete the `data` folder.
 
+**Load your fleet:** Vehicles → *Upload vehicle master sheet* → choose the master Excel (e.g. `NEW MASTER.xlsx`) → Validate → Confirm.
+Workshop vehicles become *Workshop*, vehicles without a driver become *Idle*, and only vehicles driven by your own drivers have
+their GPS km imported. Sold vehicles: open the vehicle → *Mark as sold / disposed*.
+
 Try the samples: add vehicles `DL1RT1234` (CNG), `MH12AB1234` (petrol), `KA05MN4321` (CNG) and `HR26DK0002` (electric).
 Then use **Imports** with `samples/gps_daily_km_sample.xlsx`, `samples/fuel_format1_sample.csv` and
 `samples/fuel_format2_sample.xlsx`.

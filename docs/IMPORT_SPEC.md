@@ -71,6 +71,28 @@ greater than zero. A totals mismatch is a warning and the invoice amount is kept
 A reused transaction number is rejected, and an invoice number used on a different transaction is rejected at commit.
 Re-uploading the same file adds nothing.
 
+## Vehicle master (vehicles, drivers, vendors, departments)
+
+Upload the company's master sheet from **Vehicles → Upload vehicle master sheet**, or from **Imports → Import vehicle master**.
+The `NEW MASTER` layout is recognised automatically:
+
+| Column in the sheet | Target field | Notes |
+|---|---|---|
+| Register No. | registration (required) | normalised, e.g. `DL 2C BA 7055` → `DL2CBA7055`; repeated registrations in one file are rejected |
+| Vehicle Type | model (required) | make, model and category are derived (Ciaz → Maruti Suzuki, Sedan) |
+| Fuel Type | fuelType (required) | CNG / PETROL, ELECTRIC, DIESEL, PETROL, HYBRID PETROL, CNG |
+| Vehicle Model | modelYear | year, e.g. 2021 |
+| Vendor / Driver | operatorLabel | DRIVER, VENDOR, GOVT DRIVER, OFFICER, PERSONAL, FREE LR/JN, WORKSHOP CH/MU, ACCIDENTAL, SOLD |
+| Vendor / Driver Name | driverName | blank means no driver, so the vehicle is **Idle** |
+| Vendor / Driver Contact | driverPhone | non-numbers such as "N/A" or "OFFICER" are ignored with a warning |
+| Department | department | created if new (e.g. LOOSE, MHA, MEA) |
+| Private/Commercial | registrationClass | |
+
+Optional columns: Make, Category, Chassis No, Engine No, GPS Device Name, Sold Date, Sold To / Dealer, Remarks.
+
+The status, driver type and GPS-km rules are in [CALCULATION_RULES.md §13](CALCULATION_RULES.md). The preview shows, for every
+row, whether the vehicle is new or an update, what its status will be, and whether its GPS km will be imported.
+
 ## Error report columns
 
 `Row` (spreadsheet row number), `Field`, `Error code`, `Reason`, `Value`, `Stage` (`PARSE` = worker, `COMMIT` = Java).

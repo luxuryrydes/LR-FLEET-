@@ -111,6 +111,30 @@ class SharedSpecCasesTest {
     }
 
     @Test
+    void vehicleMasterRules() throws Exception {
+        JsonNode m = new ObjectMapper().readTree(locate("master-cases.json"));
+        for (JsonNode c : m.get("operator")) {
+            String label = c.get("label").isNull() ? null : c.get("label").asText();
+            String name = c.get("name").isNull() ? null : c.get("name").asText();
+            MasterRules.Derived d = MasterRules.derive(label, name);
+            String as = label + "/" + name;
+            assertThat(d.operatorType().name()).as(as).isEqualTo(c.get("operatorType").asText());
+            assertThat(d.status()).as(as).isEqualTo(c.get("status").asText());
+            assertThat(d.ownership()).as(as).isEqualTo(c.get("ownership").asText());
+            assertThat(d.gpsKmTracked()).as(as).isEqualTo(c.get("gpsKmTracked").asBoolean());
+        }
+        for (JsonNode c : m.get("fuel")) {
+            String expected = c.get("fuelType").isNull() ? null : c.get("fuelType").asText();
+            assertThat(MasterRules.fuelType(c.get("raw").asText())).as(c.get("raw").asText()).isEqualTo(expected);
+        }
+        for (JsonNode c : m.get("model")) {
+            MasterRules.ModelInfo i = MasterRules.model(c.get("raw").asText());
+            assertThat(i).as(c.get("raw").asText())
+                    .isEqualTo(new MasterRules.ModelInfo(c.get("make").asText(), c.get("model").asText(), c.get("category").asText()));
+        }
+    }
+
+    @Test
     void registrationNormalize() {
         for (JsonNode c : reg.get("normalize")) {
             assertThat(RegistrationNormalizer.normalize(c.get("input").asText())).isEqualTo(c.get("expected").asText());

@@ -50,12 +50,13 @@ export function month(v: string): string {
 export const EFFICIENCY_UNIT: Record<string, string> = { PETROL: "km/L", DIESEL: "km/L", CNG: "km/kg", ELECTRICITY: "km/kWh" };
 export const QUANTITY_UNIT: Record<string, string> = { PETROL: "L", DIESEL: "L", CNG: "kg", ELECTRICITY: "kWh" };
 
+const ACRONYMS = new Set(["CNG", "SUV", "MUV", "LCV", "EV", "GPS", "PUC", "LR", "KM", "UPI", "DOT", "MHA", "ID"]);
+
 export function label(code: string | null | undefined): string {
   if (!code) return "—";
   return code
-    .toLowerCase()
     .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .map((w) => (ACRONYMS.has(w.toUpperCase()) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()))
     .join(" ");
 }
 

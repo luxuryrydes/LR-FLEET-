@@ -6,6 +6,7 @@ In-file duplicate handling here mirrors GpsDailyDedup so the preview shows what 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import re
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated, Literal, Optional
@@ -14,6 +15,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from .dates import parse_datetime, parse_time
 from .excel import headers_from, jsonable
+from .master import derive, fuel_type, model_info
 from .normalize import (decimal_text, extract_plate, normalize_registration, parse_bool, parse_decimal, parse_energy,
                         parse_payment)
 
@@ -34,6 +36,8 @@ class VehicleIndex:
     fuel_type: dict[int, str]
     by_alias: dict[str, int] = field(default_factory=dict)
     ambiguous: set[str] = field(default_factory=set)
+    # Vehicle ids whose GPS km are imported (driven by LR's own drivers). None = all vehicles.
+    gps_tracked: Optional[set[int]] = None
 
     def match(self, raw: object) -> tuple[Optional[int], Optional[str]]:
         """(vehicle_id, method) using: exact registration -> saved alias -> extracted plate. (None, reason) if unmatched."""
@@ -102,7 +106,7 @@ class StagingRow:
     parsed: Optional[dict] = None
     vehicle_id: Optional[int] = None
     record_date: Optional[date] = None
-    status: str = "VALID"                # VALID | WARNING | REJECTED | DUPLICATE
+    status: str = "VALID"                # VALID | WARNING | REJECTED | DUPLICATE | EXCLUDED
     group_key: Optional[str] = None
     messages: list[dict] = field(default_factory=list)
 
@@ -132,7 +136,7 @@ class ParseResult:
     rows: list[StagingRow]
 
     def counts(self) -> dict[str, int]:
-        c = {"total": len(self.rows), "VALID": 0, "WARNING": 0, "REJECTED": 0, "DUPLICATE": 0}
+        c = {"total": len(self.rows), "VALID": 0, "WARNING": 0, "REJECTED": 0, "DUPLICATE": 0, "EXCLUDED": 0}
         for r in self.rows:
             c[r.status] += 1
         return c
@@ -252,10 +256,12 @@ def parse_gps(rows: list[list[object]], header_row: int, mapping: dict, options:
                 row.parsed = to_json(rec)
             except ValidationError as e:
                 row.error("INVALID_ROW", None, e.errors()[0]["msg"])
-        if row.parsed is None and row.rejected:
-            row.parsed = None
+        if not row.rejected and vid is not None and index.gps_tracked is not None and vid not in index.gps_tracked:
+            row.status = "EXCLUDED"
+            row.info("NOT_OWN_DRIVER", "Not imported: GPS km are only taken for vehicles driven by LR's own drivers "
+                                       "(this vehicle is vendor, idle, workshop or otherwise not tracked)")
         out.append(row)
-    _dedupe_gps(out, mode)
+    _dedupe_gps([r for r in out if r.status != "EXCLUDED"], mode)
     return ParseResult(out)
 
 
@@ -420,3 +426,94 @@ def _dedupe_fuel(rows: list[StagingRow]) -> None:
                        "it will be rejected at import for review")
             else:
                 by_invoice[inv] = r
+
+
+# ---------------------------------------------------------------------------------------------- vehicle master
+
+_BLANK_NAMES = {"", "NA", "N/A", "NIL", "NONE", "-", "--", "NULL"}
+STATUS_TEXT = {"ACTIVE": "Active", "IDLE": "Idle (no driver)", "WORKSHOP": "Workshop", "SOLD": "Sold", "SCRAPPED": "Scrapped"}
+
+
+def _clean_name(v: object) -> Optional[str]:
+    t = _text(v)
+    return None if t is None or t.upper() in _BLANK_NAMES else t
+
+
+def _clean_phone(row: "StagingRow", v: object) -> Optional[str]:
+    t = _text(v)
+    if t is None or t.upper() in _BLANK_NAMES:
+        return None
+    digits = re.sub(r"\D", "", t)
+    if len(digits) < 8:
+        row.warn("INVALID_PHONE", "driverPhone", f"Contact '{t}' is not a phone number; not saved")
+        return None
+    return digits[-10:] if len(digits) > 10 and digits.startswith("91") else digits
+
+
+def parse_master(rows: list[list[object]], header_row: int, mapping: dict, options: dict, index: VehicleIndex,
+                 settings: dict, today: date) -> ParseResult:
+    out: list[StagingRow] = []
+    seen: dict[str, StagingRow] = {}
+    for row_number, values in _iter_records(rows, header_row):
+        row = StagingRow(row_number, {k: jsonable(v) for k, v in values.items()})
+        raw_reg = _cell(values, mapping, "registration")
+        reg = normalize_registration(raw_reg)
+        if len(reg) < 4:
+            row.error("MISSING_REGISTRATION", "registration", "Registration number is blank or too short", raw_reg)
+        elif extract_plate(reg) != reg:
+            row.warn("UNUSUAL_REGISTRATION", "registration", f"'{raw_reg}' does not look like an Indian registration number; check it")
+        raw_model = _text(_cell(values, mapping, "model"))
+        if raw_model is None:
+            row.error("MISSING_MODEL", "model", "Vehicle type / model is blank")
+        raw_fuel = _cell(values, mapping, "fuelType")
+        fuel = fuel_type(raw_fuel)
+        if fuel is None:
+            row.error("INVALID_FUEL_TYPE", "fuelType", f"Unknown fuel type '{raw_fuel}'", raw_fuel)
+        year = None
+        raw_year = _cell(values, mapping, "modelYear")
+        if raw_year is not None:
+            try:
+                y = int(Decimal(str(raw_year).strip()))
+                if 1980 <= y <= today.year + 1:
+                    year = y
+                else:
+                    row.warn("INVALID_YEAR", "modelYear", f"Model year {raw_year} ignored")
+            except Exception:  # noqa: BLE001
+                row.warn("INVALID_YEAR", "modelYear", f"Model year '{raw_year}' ignored")
+        label = _text(_cell(values, mapping, "operatorLabel"))
+        name = _clean_name(_cell(values, mapping, "driverName"))
+        phone = _clean_phone(row, _cell(values, mapping, "driverPhone"))
+        dept = _text(_cell(values, mapping, "department"))
+        sold_date = None
+        if mapping.get("soldDate") and _cell(values, mapping, "soldDate") is not None:
+            try:
+                sd = parse_datetime(_cell(values, mapping, "soldDate"))
+                sold_date = sd.date().isoformat() if sd else None
+            except ValueError as e:
+                row.warn("INVALID_DATE", "soldDate", f"Sold date ignored: {e}")
+
+        if not row.rejected:
+            if reg in seen:
+                row.error("DUPLICATE_REGISTRATION", "registration", f"{reg} already appears in row {seen[reg].row_number}", raw_reg)
+            else:
+                seen[reg] = row
+        if not row.rejected:
+            d = derive(label, name)
+            mi = model_info(raw_model)
+            row.parsed = {
+                "registration": reg, "model": raw_model, "fuelType": raw_fuel if isinstance(raw_fuel, str) else str(raw_fuel),
+                "modelYear": year, "operatorLabel": label, "driverName": name, "driverPhone": phone, "department": dept,
+                "registrationClass": _text(_cell(values, mapping, "registrationClass")), "make": _text(_cell(values, mapping, "make")),
+                "category": _text(_cell(values, mapping, "category")), "chassisNumber": _text(_cell(values, mapping, "chassisNumber")),
+                "engineNumber": _text(_cell(values, mapping, "engineNumber")), "gpsDeviceName": _text(_cell(values, mapping, "gpsDeviceName")),
+                "soldDate": sold_date, "soldTo": _text(_cell(values, mapping, "soldTo")), "remarks": _text(_cell(values, mapping, "remarks")),
+                # preview of what the server will decide (Java MasterRules is authoritative)
+                "preview": {**d, "make": mi["make"], "modelName": mi["model"], "category": mi["category"], "fuel": fuel,
+                            "existing": reg in index.by_reg},
+            }
+            row.vehicle_id = index.by_reg.get(reg)
+            gps = "GPS km imported" if d["gpsKmTracked"] else "GPS km not imported"
+            row.info("MASTER_PREVIEW", f"{'Update' if reg in index.by_reg else 'New'}: {STATUS_TEXT.get(d['status'], d['status'])}"
+                                       f" · {d['operatorType'].replace('_', ' ').title()} · {gps}")
+        out.append(row)
+    return ParseResult(out)

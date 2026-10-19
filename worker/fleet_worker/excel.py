@@ -6,7 +6,7 @@ import io
 from datetime import date, datetime, time
 from pathlib import Path
 
-from .mapping import GPS_FIELDS, FUEL_FIELDS, header_score, suggest_mapping
+from .mapping import FUEL_FIELDS, GPS_FIELDS, MASTER_FIELDS, header_score, suggest_mapping
 
 MAX_HEADER_SCAN = 30
 SAMPLE_ROWS = 5
@@ -148,7 +148,7 @@ def headers_from(row: list[object]) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
     for i, c in enumerate(row):
-        name = str(c).strip() if c is not None and str(c).strip() else f"Column {i + 1}"
+        name = " ".join(str(c).split()) if c is not None and str(c).strip() else f"Column {i + 1}"
         base, n = name, 2
         while name in seen:
             name = f"{base} ({n})"
@@ -188,6 +188,7 @@ def describe_file(path: Path) -> dict:
             "headerRow": h + 1,
             "headers": headers,
             "sample": sample,
-            "suggestedMapping": {"GPS_KM": suggest_mapping(headers, "GPS_KM"), "FUEL": suggest_mapping(headers, "FUEL")},
+            "suggestedMapping": {"GPS_KM": suggest_mapping(headers, "GPS_KM"), "FUEL": suggest_mapping(headers, "FUEL"),
+                                 "VEHICLE_MASTER": suggest_mapping(headers, "VEHICLE_MASTER")},
         })
-    return {"sheets": sheets, "targetFields": {"GPS_KM": GPS_FIELDS, "FUEL": FUEL_FIELDS}}
+    return {"sheets": sheets, "targetFields": {"GPS_KM": GPS_FIELDS, "FUEL": FUEL_FIELDS, "VEHICLE_MASTER": MASTER_FIELDS}}

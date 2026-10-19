@@ -80,6 +80,10 @@ public class VehicleController {
                 Exporter.col("Department", "departmentName"), Exporter.col("Customer", "customerName"), Exporter.col("Status", "status"),
                 Exporter.num("Expected mileage", "expectedMileage"), Exporter.num("Service interval km", "serviceIntervalKm"),
                 Exporter.date("Purchase date", "purchaseDate"), Exporter.money("Purchase cost", "purchaseCost"),
+                Exporter.col("Driver type", "operatorType"), Exporter.col("Sheet label", "assignmentLabel"),
+                Exporter.col("GPS km imported", "gpsKmTracked"), Exporter.col("Private/Commercial", "registrationClass"),
+                Exporter.col("Disposal", "disposalType"), Exporter.date("Disposal date", "disposalDate"),
+                Exporter.col("Sold to / dealer", "disposalParty"), Exporter.money("Sale amount", "disposalAmount"),
                 Exporter.col("GPS device", "gpsDeviceName"), Exporter.col("Remarks", "remarks")), all);
     }
 
@@ -108,6 +112,23 @@ public class VehicleController {
     @PreAuthorize(Roles.MANAGE)
     public void deactivate(@PathVariable long id, @Valid @RequestBody ReasonRequest req) {
         vehicles.deactivate(id, req.reason());
+    }
+
+    public record DisposalRequest(@NotBlank @jakarta.validation.constraints.Pattern(regexp = "SOLD|SCRAPPED|RETURNED_TO_VENDOR|TRANSFERRED|OTHER") String type,
+                                  @NotNull LocalDate date, @Size(max = 200) String party, @DecimalMin("0") BigDecimal amount,
+                                  @Size(max = 1000) String remarks) {
+    }
+
+    @PostMapping("/{id}/dispose")
+    @PreAuthorize(Roles.MANAGE)
+    public void dispose(@PathVariable long id, @Valid @RequestBody DisposalRequest req) {
+        vehicles.dispose(id, new VehicleService.Disposal(req.type(), req.date(), req.party(), req.amount(), req.remarks()));
+    }
+
+    @PostMapping("/{id}/undo-disposal")
+    @PreAuthorize(Roles.MANAGE)
+    public void undoDisposal(@PathVariable long id, @Valid @RequestBody ReasonRequest req) {
+        vehicles.undoDisposal(id, req.reason());
     }
 
     @GetMapping("/{id}/assignments")

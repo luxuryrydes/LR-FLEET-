@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, type Page, type Row } from "../lib/api";
 import { Can } from "../lib/auth";
-import { EFFICIENCY_UNIT, QUANTITY_UNIT, date, dateTime, daysAgoIso, label, number, rupees } from "../lib/format";
+import { EFFICIENCY_UNIT, QUANTITY_UNIT, date, dateTime, daysAgoIso, label, number, rupees, todayIso } from "../lib/format";
 import { DataTable } from "../components/DataTable";
 import { Badge, Card, ErrorBox, Field, Modal, Notice, PageHeader, Spinner, Tabs } from "../components/ui";
 
@@ -14,6 +14,7 @@ export function VehicleDetailPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("overview");
   const [deactivate, setDeactivate] = useState(false);
+  const [dispose, setDispose] = useState(false);
   const v = useQuery({ queryKey: ["vehicle", id], queryFn: () => api.get<Row>(`/api/vehicles/${id}`) });
   const refresh = () => qc.invalidateQueries({ queryKey: ["vehicle", id] });
 
@@ -32,7 +33,8 @@ export function VehicleDetailPage() {
             <Badge value={d.status} />
             <Can perm="write"><Link className="btn" to={`/vehicles/${id}/edit`}>Edit</Link></Can>
             <Can perm="manage">
-              {d.status !== "INACTIVE" && <button className="btn btn-danger" onClick={() => setDeactivate(true)}>Deactivate</button>}
+              {!d.disposalType && <button className="btn" onClick={() => setDispose(true)}>Mark as sold / disposed</button>}
+              {d.status !== "INACTIVE" && !d.disposalType && <button className="btn btn-danger" onClick={() => setDeactivate(true)}>Deactivate</button>}
             </Can>
           </>
         }
@@ -73,12 +75,15 @@ export function VehicleDetailPage() {
       {tab === "history" && <History id={id!} />}
       {tab === "alerts" && <AlertsTab id={id!} />}
       {deactivate && <DeactivateModal id={id!} onClose={() => setDeactivate(false)} onDone={refresh} />}
+      {dispose && <DisposeModal id={id!} onClose={() => setDispose(false)} onDone={refresh} />}
     </>
   );
 }
 
 function Overview({ d, s }: { d: Row; s: Row }) {
   return (
+    <>
+    {d.disposalType && <DisposalCard d={d} />}
     <div className="grid grid-2">
       <Card title="Service status">
         {s && s.status ? (
@@ -111,6 +116,8 @@ function Overview({ d, s }: { d: Row; s: Row }) {
       <Card title="Vehicle details">
         <dl className="kv">
           <dt>Ownership</dt><dd>{label(d.ownershipType)}{d.vendorName && ` · ${d.vendorName}`}</dd>
+          <dt>Driver type</dt><dd>{label(d.operatorType)}{d.assignmentLabel && ` (${d.assignmentLabel})`} · GPS km {d.gpsKmTracked ? "imported" : "not imported"}</dd>
+          <dt>Private / commercial</dt><dd>{label(d.registrationClass)}</dd>
           <dt>Driver</dt><dd>{d.driverName ?? "Unassigned"} {d.driverPhone && <span className="muted">({d.driverPhone})</span>}</dd>
           <dt>Department</dt><dd>{d.departmentName ?? "—"}</dd>
           <dt>Customer</dt><dd>{d.customerName ?? "—"}</dd>
@@ -124,6 +131,74 @@ function Overview({ d, s }: { d: Row; s: Row }) {
       </Card>
       <Aliases id={String(d.id)} />
     </div>
+    </>
+  );
+}
+
+function DisposalCard({ d }: { d: Row }) {
+  const qc = useQueryClient();
+  const [error, setError] = useState<unknown>(null);
+  const undo = async () => {
+    const reason = prompt("Why is this disposal being reversed?");
+    if (!reason) return;
+    try {
+      await api.post(`/api/vehicles/${d.id}/undo-disposal`, { reason });
+      qc.invalidateQueries({ queryKey: ["vehicle", String(d.id)] });
+    } catch (e) {
+      setError(e);
+    }
+  };
+  return (
+    <Card title={`${label(d.disposalType)} on ${date(d.disposalDate)}`} actions={<Can perm="manage"><button className="btn btn-small" onClick={undo}>Undo</button></Can>}>
+      <ErrorBox error={error} />
+      <dl className="kv">
+        <dt>{d.disposalType === "SOLD" ? "Sold to / dealer" : "Party"}</dt><dd>{d.disposalParty ?? "—"}</dd>
+        <dt>Amount</dt><dd>{rupees(d.disposalAmount)}</dd>
+        <dt>Remarks</dt><dd>{d.disposalRemarks ?? "—"}</dd>
+      </dl>
+      <p className="muted small">The vehicle is excluded from active counts, GPS km imports and alerts. Its full history is kept.</p>
+    </Card>
+  );
+}
+
+export function DisposeModal({ id, onClose, onDone }: { id: string; onClose: () => void; onDone: () => void }) {
+  const [f, setF] = useState({ type: "SOLD", date: todayIso(), party: "", amount: "", remarks: "" });
+  const [error, setError] = useState<unknown>(null);
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
+  const go = async () => {
+    setError(null);
+    try {
+      await api.post(`/api/vehicles/${id}/dispose`, { ...f, amount: f.amount || null, party: f.party || null, remarks: f.remarks || null });
+      onDone();
+      onClose();
+    } catch (e) {
+      setError(e);
+    }
+  };
+  const partyLabel = f.type === "SOLD" ? "Sold to (dealer / buyer)" : f.type === "RETURNED_TO_VENDOR" ? "Returned to (vendor)" :
+    f.type === "TRANSFERRED" ? "Transferred to" : f.type === "SCRAPPED" ? "Scrap dealer" : "Party";
+  return (
+    <Modal title="Mark vehicle as sold / disposed" onClose={onClose} footer={<>
+      <button className="btn" onClick={onClose}>Cancel</button>
+      <button className="btn btn-primary" disabled={!f.date || (f.type === "SOLD" && !f.party.trim())} onClick={go}>Save</button>
+    </>}>
+      <ErrorBox error={error} />
+      <div className="form-grid">
+        <Field label="Type" required>
+          <select value={f.type} onChange={set("type")} aria-label="Disposal type">
+            <option value="SOLD">Sold</option>
+            <option value="SCRAPPED">Scrapped</option>
+            <option value="RETURNED_TO_VENDOR">Returned to vendor</option>
+            <option value="TRANSFERRED">Transferred</option>
+            <option value="OTHER">Other</option>
+          </select>
+        </Field>
+        <Field label="Date" required><input type="date" max={todayIso()} value={f.date} onChange={set("date")} aria-label="Disposal date" /></Field>
+        <Field label={partyLabel} required={f.type === "SOLD"}><input value={f.party} onChange={set("party")} aria-label={partyLabel} /></Field>
+        <Field label="Amount (₹)"><input inputMode="decimal" value={f.amount} onChange={set("amount")} aria-label="Amount" /></Field>
+      </div>
+      <Field label="Remarks"><input value={f.remarks} onChange={set("remarks")} aria-label="Remarks" /></Field>
+    </Modal>
   );
 }
 

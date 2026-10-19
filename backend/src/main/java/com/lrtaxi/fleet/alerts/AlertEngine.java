@@ -146,7 +146,7 @@ public class AlertEngine {
         counts.put("HIGH_COST_PER_KM", high);
 
         // 4. Falling mileage vs expected
-        FleetFilter wf = new FleetFilter(from, today, null, null, null, null, null, null, null, null, null);
+        FleetFilter wf = new FleetFilter(from, today, null, null, null, null, null, null, null, null, null, null);
         int falling = 0;
         for (Map<String, Object> r : efficiency.vehicleMileageTable(wf)) {
             if (!Boolean.TRUE.equals(r.get("belowThreshold"))) {

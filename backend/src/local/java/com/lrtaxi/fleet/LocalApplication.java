@@ -42,7 +42,8 @@ public final class LocalApplication {
         defEnv("app.jwt-secret", "JWT_SECRET", "local-development-only-secret-do-not-use-in-production-123");
         defEnv("app.bootstrap-admin.email", "ADMIN_EMAIL", "admin@lrtaxi.local");
         defEnv("app.bootstrap-admin.password", "ADMIN_PASSWORD", "Admin@12345");
-        defEnv("app.allowed-origins", "ALLOWED_ORIGINS", "http://localhost:5173");
+        // Any local port (Vite moves to 5174+ when 5173 is busy).
+        defEnv("app.allowed-origins", "ALLOWED_ORIGINS", "http://localhost:[*],http://127.0.0.1:[*]");
 
         System.out.println();
         System.out.println("  Local PostgreSQL running on localhost:" + PORT + " (data: " + pgData + ")");

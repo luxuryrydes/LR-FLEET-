@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, download, type Page, type Row } from "../lib/api";
 import { Can } from "../lib/auth";
 import { filtersToQuery } from "../lib/filters";
-import { label, number } from "../lib/format";
+import { date, label, number } from "../lib/format";
 import { useUrlFilters } from "../lib/useUrlFilters";
 import { DataTable } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
@@ -30,7 +30,10 @@ export function VehiclesPage() {
           <>
             <button className="btn" onClick={() => exportAs("xlsx")}>Export Excel</button>
             <button className="btn" onClick={() => exportAs("csv")}>Export CSV</button>
-            <Can perm="write"><Link className="btn btn-primary" to="/vehicles/new">+ Add vehicle</Link></Can>
+            <Can perm="write">
+              <Link className="btn" to="/imports/new?type=VEHICLE_MASTER">Upload vehicle master sheet</Link>
+              <Link className="btn btn-primary" to="/vehicles/new">+ Add vehicle</Link>
+            </Can>
           </>
         }
       />
@@ -53,9 +56,11 @@ export function VehiclesPage() {
           { key: "categoryCode", header: "Category", render: (r) => label(r.categoryCode) },
           { key: "ownershipType", header: "Ownership", render: (r) => label(r.ownershipType) },
           { key: "department", header: "Department", sortable: true, render: (r) => r.departmentName ?? "—" },
-          { key: "driverName", header: "Driver", render: (r) => r.driverName ?? "—" },
+          { key: "driverName", header: "Driver / vendor", render: (r) => r.driverName ?? r.vendorName ?? "—" },
+          { key: "operatorType", header: "Driver type", render: (r) => <>{label(r.operatorType)}{r.assignmentLabel && <span className="muted small"> ({r.assignmentLabel})</span>}</> },
+          { key: "gpsKmTracked", header: "GPS km", render: (r) => r.gpsKmTracked ? <Badge value="OK" text="imported" /> : <Badge value="DUPLICATE" text="not imported" /> },
           { key: "expectedMileage", header: "Expected mileage", align: "right", render: (r) => number(r.expectedMileage, 2) },
-          { key: "status", header: "Status", sortable: true, render: (r) => <Badge value={r.status} /> },
+          { key: "status", header: "Status", sortable: true, render: (r) => <><Badge value={r.status} />{r.disposalDate && <span className="muted small"> {date(r.disposalDate)}</span>}</> },
         ]}
       />
     </>

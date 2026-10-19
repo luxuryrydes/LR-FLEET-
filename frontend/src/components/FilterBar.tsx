@@ -11,7 +11,7 @@ interface Props {
   hideDates?: boolean;
 }
 
-const ALL: (keyof FleetFilters)[] = ["fuelType", "category", "ownership", "vendorId", "driverId", "departmentId", "status"];
+const ALL: (keyof FleetFilters)[] = ["fuelType", "category", "ownership", "operatorType", "vendorId", "driverId", "departmentId", "status"];
 
 export function FilterBar({ value, onApply, show = ALL, hideDates }: Props) {
   const [draft, setDraft] = useState<FleetFilters>(value);
@@ -75,6 +75,15 @@ export function FilterBar({ value, onApply, show = ALL, hideDates }: Props) {
           <select value={draft.ownership} onChange={set("ownership")} aria-label="Ownership">
             <option value="">All</option>
             {codes(lk?.ownershipTypes).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
+      )}
+      {show.includes("operatorType") && (
+        <label>
+          <span>Driver type</span>
+          <select value={draft.operatorType} onChange={set("operatorType")} aria-label="Driver type">
+            <option value="">All</option>
+            {codes(lk?.operatorTypes).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </label>
       )}

@@ -49,7 +49,8 @@ describe("Indian formatting", () => {
   });
   it("formats numbers and labels", () => {
     expect(number(100000, 0)).toBe("1,00,000");
-    expect(label("CNG_PETROL")).toBe("Cng Petrol");
+    expect(label("CNG_PETROL")).toBe("CNG Petrol");
+    expect(label("OWN_DRIVER")).toBe("Own Driver");
   });
 });
 

@@ -7,6 +7,8 @@ GPS_FIELDS = ["vehicle", "date", "km", "tripStart"]
 FUEL_FIELDS = ["vehicle", "date", "time", "energyType", "quantity", "unitPrice", "grossAmount", "discountAmount",
                "taxAmount", "invoiceAmount", "odometerKm", "isFullTank", "stationName", "invoiceNumber",
                "transactionRef", "paymentMethod", "notes"]
+MASTER_FIELDS = ["registration", "model", "fuelType", "modelYear", "operatorLabel", "driverName", "driverPhone", "department",
+                 "registrationClass", "make", "category", "chassisNumber", "engineNumber", "gpsDeviceName", "soldDate", "soldTo", "remarks"]
 
 # Lower-case, alphanumeric-only header keys. Order matters: earlier = stronger match.
 SYNONYMS: dict[str, dict[str, list[str]]] = {
@@ -36,6 +38,27 @@ SYNONYMS: dict[str, dict[str, list[str]]] = {
         "transactionRef": ["transactionno", "transactionid", "txnid", "txnno", "referenceno", "refno", "utr"],
         "paymentMethod": ["paymentmethod", "paymentmode", "payment", "mode", "paidby"],
         "notes": ["notes", "remarks", "comment", "comments", "narration"],
+    },
+    "VEHICLE_MASTER": {
+        "registration": ["registerno", "registrationno", "registrationnumber", "vehicleno", "vehiclenumber", "regno", "registration",
+                         "vehicle"],
+        "model": ["vehicletype", "model", "carmodel", "makemodel", "modelname"],
+        "fuelType": ["fueltype", "fuel"],
+        "modelYear": ["vehiclemodel", "modelyear", "year", "mfgyear", "manufacturingyear", "yearofmanufacture"],
+        "operatorLabel": ["vendordriver", "drivervendor", "drivertype", "operator", "assignment"],
+        "driverName": ["vendordrivername", "drivervendorname", "drivername", "name", "vendorname"],
+        "driverPhone": ["vendordrivercontact", "drivervendorcontact", "drivercontact", "contact", "mobile", "phone", "contactno",
+                        "mobileno"],
+        "department": ["department", "dept", "client", "customer"],
+        "registrationClass": ["privatecommercial", "commercialprivate", "registrationtype", "permittype"],
+        "make": ["make", "brand", "manufacturer"],
+        "category": ["category", "vehiclecategory", "bodytype"],
+        "chassisNumber": ["chassisno", "chassisnumber", "chassis"],
+        "engineNumber": ["engineno", "enginenumber", "engine"],
+        "gpsDeviceName": ["gpsdevicename", "gpsname", "devicename", "imei"],
+        "soldDate": ["solddate", "dateofsale", "saledate"],
+        "soldTo": ["soldto", "dealer", "buyer", "dealername"],
+        "remarks": ["remarks", "notes", "comment"],
     },
 }
 

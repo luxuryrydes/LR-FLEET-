@@ -10,8 +10,9 @@ export interface StagingMessage {
 }
 
 /** Parsed-row preview with the reason for every rejected, duplicate or warning row. */
-export function ImportPreview({ rows, importType }: { rows: Row[]; importType: "GPS_KM" | "FUEL" }) {
+export function ImportPreview({ rows, importType }: { rows: Row[]; importType: "GPS_KM" | "FUEL" | "VEHICLE_MASTER" }) {
   if (rows.length === 0) return <div className="empty">No rows in this view.</div>;
+  if (importType === "VEHICLE_MASTER") return <MasterPreview rows={rows} />;
   return (
     <div className="table-scroll">
       <table className="table" aria-label="Import preview">
@@ -54,6 +55,44 @@ export function ImportPreview({ rows, importType }: { rows: Row[]; importType: "
                     </ul>
                   )}
                 </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function MasterPreview({ rows }: { rows: Row[] }) {
+  return (
+    <div className="table-scroll">
+      <table className="table" aria-label="Import preview">
+        <thead>
+          <tr>
+            <th>Row</th><th>Status</th><th>Registration</th><th>Vehicle</th><th>Fuel</th><th>Driver / vendor</th><th>Department</th>
+            <th>Will be</th><th>GPS km</th><th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const p = (r.parsed ?? {}) as Row;
+            const pv = (p.preview ?? {}) as Row;
+            const msgs = ((r.messages ?? []) as StagingMessage[]).filter((m) => m.code !== "MASTER_PREVIEW");
+            return (
+              <tr key={r.rowNumber}>
+                <td className="num">{r.rowNumber}</td>
+                <td><Badge value={r.status} /></td>
+                <td className="mono">{p.registration ?? "—"} {pv.existing ? <span className="muted small">(update)</span> : p.registration ? <span className="muted small">(new)</span> : null}</td>
+                <td>{pv.make ? `${pv.make} ${pv.modelName}` : p.model ?? "—"}{p.modelYear ? ` (${p.modelYear})` : ""}</td>
+                <td>{pv.fuel ? label(pv.fuel) : "—"}</td>
+                <td>{p.driverName ?? "—"} <span className="muted small">{p.operatorLabel ?? ""}</span></td>
+                <td>{p.department ?? "—"}</td>
+                <td>{pv.status ? <><Badge value={pv.status} /> <span className="muted small">{label(pv.operatorType)}</span></> : "—"}</td>
+                <td>{pv.status ? (pv.gpsKmTracked ? <Badge value="OK" text="imported" /> : <Badge value="DUPLICATE" text="not imported" />) : "—"}</td>
+                <td>{msgs.length === 0 ? <span className="muted">—</span> : (
+                  <ul className="msg-list">{msgs.map((m, i) => <li key={i} className={`msg-${m.level}`}>{m.message}</li>)}</ul>
+                )}</td>
               </tr>
             );
           })}

@@ -22,7 +22,8 @@ public record FleetFilter(
         Long vendorId,
         Long driverId,
         Long departmentId,
-        String status) {
+        String status,
+        String operatorType) {
 
     public static final int MAX_RANGE_DAYS = 3660;
 
@@ -77,6 +78,10 @@ public record FleetFilter(
             sql.append(" AND ").append(v).append(".current_department_id = :f_dept");
             p.addValue("f_dept", departmentId);
         }
+        if (operatorType != null && !operatorType.isBlank()) {
+            sql.append(" AND ").append(v).append(".operator_type = :f_operator");
+            p.addValue("f_operator", operatorType);
+        }
         if (status != null && !status.isBlank()) {
             sql.append(" AND ").append(v).append(".status = :f_status");
             p.addValue("f_status", status);
@@ -88,6 +93,6 @@ public record FleetFilter(
     }
 
     public static FleetFilter empty() {
-        return new FleetFilter(null, null, null, null, null, null, null, null, null, null, null);
+        return new FleetFilter(null, null, null, null, null, null, null, null, null, null, null, null);
     }
 }

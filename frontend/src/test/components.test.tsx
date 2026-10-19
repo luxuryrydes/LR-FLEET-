@@ -8,6 +8,7 @@ import { ImportPreview } from "../components/ImportPreview";
 import { defaultFilters } from "../lib/filters";
 import { VehicleForm, validateVehicle, type VehicleDraft } from "../pages/VehicleForm";
 import { MappingStep } from "../pages/ImportWizard";
+import { DisposeModal } from "../pages/VehicleDetail";
 import * as authModule from "../lib/auth";
 import { Can } from "../lib/auth";
 
@@ -97,6 +98,7 @@ describe("Vehicle form validation messages", () => {
     vendorId: "", currentDriverId: "", currentDepartmentId: "", customerName: "", status: "ACTIVE", expectedMileage: "", serviceIntervalKm: "",
     serviceIntervalMonths: "", tankCapacity: "", batteryCapacityKwh: "", purchaseDate: "", purchaseCost: "", chassisNumber: "", engineNumber: "",
     gpsDeviceName: "", remarks: "", openingOdometerKm: "", openingOdometerDate: "", changeReason: "",
+    operatorType: "OWN_DRIVER", gpsKmTracked: true, registrationClass: "",
   };
 
   it("validates required and numeric fields", () => {
@@ -145,5 +147,34 @@ describe("Permission-gated controls", () => {
     expect(screen.queryByRole("button", { name: "Replace records" })).not.toBeInTheDocument();
     rerender(as(["MANAGER"], <Can perm="manage"><button>Replace records</button></Can>));
     expect(screen.getByRole("button", { name: "Replace records" })).toBeInTheDocument();
+  });
+});
+
+describe("Vehicle master preview and disposal", () => {
+  it("shows the derived status and GPS tracking for each master row", () => {
+    const rows = [
+      { rowNumber: 2, status: "VALID", parsed: { registration: "DL1AA0001", model: "Ciaz", driverName: "TEST", operatorLabel: "DRIVER",
+        preview: { status: "ACTIVE", operatorType: "OWN_DRIVER", gpsKmTracked: true, make: "Maruti Suzuki", modelName: "Ciaz", fuel: "CNG_PETROL", existing: false } }, messages: [] },
+      { rowNumber: 3, status: "VALID", parsed: { registration: "DL1AA0003", model: "Ciaz", driverName: null, operatorLabel: "WORKSHOP CH",
+        preview: { status: "WORKSHOP", operatorType: "NONE", gpsKmTracked: false, make: "Maruti Suzuki", modelName: "Ciaz", fuel: "CNG_PETROL", existing: true } }, messages: [] },
+    ];
+    render(<ImportPreview rows={rows} importType="VEHICLE_MASTER" />);
+    const body = within(screen.getByRole("table", { name: "Import preview" })).getAllByRole("row").slice(1);
+    expect(within(body[0]).getByText("Active")).toBeInTheDocument();
+    expect(within(body[0]).getByText("imported")).toBeInTheDocument();
+    expect(within(body[0]).getByText("(new)")).toBeInTheDocument();
+    expect(within(body[1]).getByText("Workshop")).toBeInTheDocument();
+    expect(within(body[1]).getByText("not imported")).toBeInTheDocument();
+    expect(within(body[1]).getByText("(update)")).toBeInTheDocument();
+  });
+
+  it("requires a dealer / buyer before a sale can be saved", async () => {
+    wrap(<DisposeModal id="1" onClose={() => {}} onDone={() => {}} />);
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toBeDisabled();
+    await userEvent.type(screen.getByLabelText("Sold to (dealer / buyer)"), "Maruti True Value, Gurugram");
+    expect(save).toBeEnabled();
+    await userEvent.selectOptions(screen.getByLabelText("Disposal type"), "SCRAPPED");
+    expect(screen.getByLabelText("Scrap dealer")).toBeInTheDocument();
   });
 });

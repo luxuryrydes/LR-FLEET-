@@ -174,3 +174,32 @@ Untrusted readings are ignored for baselines and odometer-based mileage.
 
 Dashboards exclude invalid or incomplete measurements. Counts of *vehicles with missing GPS data*, *missing fuel records* and
 *missing service records* are shown separately so that gaps are visible.
+
+## 13. Vehicle master, driver type and GPS km
+
+Implemented in `MasterRules.java` (authoritative) and mirrored in `worker/fleet_worker/master.py` for the import preview.
+Both are tested against [`spec/master-cases.json`](../spec/master-cases.json).
+
+| "Vendor / Driver" value | Status | Driver type | Ownership | GPS km imported |
+|---|---|---|---|---|
+| WORKSHOP …, ACCIDENTAL | WORKSHOP | None | Owned | No |
+| SOLD / SCRAPPED | SOLD / SCRAPPED | None | Owned | No |
+| DRIVER + name | ACTIVE | Own driver | Owned | **Yes** |
+| DRIVER, no name | IDLE | Own driver | Owned | No |
+| VENDOR | ACTIVE (IDLE if no name) | Vendor | Vendor attached | No |
+| GOVT DRIVER | ACTIVE (IDLE if no name) | Govt driver | Owned | No |
+| OFFICER, PERSONAL | ACTIVE | Officer / Personal | Owned | No |
+| FREE LR, FREE JN, anything else | IDLE | None | Owned | No |
+| (blank) + name | ACTIVE | Own driver | Owned | Yes |
+
+* **GPS km are imported only for vehicles with `gps_km_tracked = true`.** These are vehicles driven by LR's own
+  drivers. GPS rows for other vehicles are shown as *Not our driver* in the import preview and are never saved. The flag
+  can be changed per vehicle (Edit vehicle → "Import GPS km for this vehicle").
+* Make, model and category come from the "Vehicle Type" text (e.g. `TATA NEXON EV XM` → Tata, Nexon EV XM, SUV).
+  Fuel `CNG / PETROL` → CNG_PETROL (bi-fuel) and `HYBRID PETROL` → HYBRID.
+* Drivers are matched by name + phone, vendors by name, and departments by name. Missing ones are created.
+* Re-importing the sheet never duplicates vehicles. *Add new only* leaves existing vehicles unchanged. *Add new and update
+  existing* (manager, with a reason) updates them and records driver, department, status and driver-type changes in the history.
+* **Sold / disposed** (vehicle page → *Mark as sold / disposed*): type (sold, scrapped, returned to vendor, transferred, other),
+  date, dealer/buyer (required for a sale), amount and remarks. The vehicle becomes SOLD, SCRAPPED or INACTIVE, its GPS km
+  stop being imported, and later master imports never revive it. A manager can undo a disposal recorded by mistake.

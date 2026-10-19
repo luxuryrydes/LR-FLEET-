@@ -34,6 +34,9 @@ export interface VehicleDraft {
   openingOdometerKm: string;
   openingOdometerDate: string;
   changeReason: string;
+  operatorType: string;
+  gpsKmTracked: boolean;
+  registrationClass: string;
 }
 
 const EMPTY: VehicleDraft = {
@@ -41,7 +44,7 @@ const EMPTY: VehicleDraft = {
   ownershipType: "OWNED", vendorId: "", currentDriverId: "", currentDepartmentId: "", customerName: "", status: "ACTIVE",
   expectedMileage: "", serviceIntervalKm: "", serviceIntervalMonths: "", tankCapacity: "", batteryCapacityKwh: "", purchaseDate: "",
   purchaseCost: "", chassisNumber: "", engineNumber: "", gpsDeviceName: "", remarks: "", openingOdometerKm: "", openingOdometerDate: "",
-  changeReason: "",
+  changeReason: "", operatorType: "OWN_DRIVER", gpsKmTracked: true, registrationClass: "",
 };
 
 /** Client-side checks for immediate feedback. The server repeats every check and is authoritative. */
@@ -79,6 +82,7 @@ function toPayload(d: VehicleDraft) {
     batteryCapacityKwh: n(d.batteryCapacityKwh), purchaseDate: n(d.purchaseDate), purchaseCost: n(d.purchaseCost),
     chassisNumber: n(d.chassisNumber), engineNumber: n(d.engineNumber), gpsDeviceName: n(d.gpsDeviceName), remarks: n(d.remarks),
     openingOdometerKm: n(d.openingOdometerKm), openingOdometerDate: n(d.openingOdometerDate), changeReason: n(d.changeReason),
+    operatorType: d.operatorType || "OWN_DRIVER", gpsKmTracked: d.gpsKmTracked, registrationClass: n(d.registrationClass),
   };
 }
 
@@ -92,7 +96,8 @@ function fromVehicle(v: Row): VehicleDraft {
     customerName: s(v.customerName), status: s(v.status), expectedMileage: s(v.expectedMileage), serviceIntervalKm: s(v.serviceIntervalKm),
     serviceIntervalMonths: s(v.serviceIntervalMonths), tankCapacity: s(v.tankCapacity), batteryCapacityKwh: s(v.batteryCapacityKwh),
     purchaseDate: s(v.purchaseDate), purchaseCost: s(v.purchaseCost), chassisNumber: s(v.chassisNumber), engineNumber: s(v.engineNumber),
-    gpsDeviceName: s(v.gpsDeviceName), remarks: s(v.remarks),
+    gpsDeviceName: s(v.gpsDeviceName), remarks: s(v.remarks), operatorType: s(v.operatorType) || "OWN_DRIVER",
+    gpsKmTracked: Boolean(v.gpsKmTracked), registrationClass: s(v.registrationClass),
   };
 }
 
@@ -173,6 +178,21 @@ export function VehicleForm({ initial, editing, onSubmit, busy, serverError }: {
           <Field label="Department">
             <Select value={d.currentDepartmentId} onChange={setV("currentDepartmentId")} placeholder="Unassigned" aria-label="Department"
                     options={(lk?.departments ?? []).map((v) => ({ value: String(v.id), label: v.name }))} />
+          </Field>
+          <Field label="Driver type" hint="Who drives the vehicle">
+            <Select value={d.operatorType} aria-label="Driver type"
+                    onChange={(v) => setD({ ...d, operatorType: v, gpsKmTracked: v === "OWN_DRIVER" })}
+                    options={codes(lk?.operatorTypes ?? ["OWN_DRIVER", "VENDOR", "GOVT_DRIVER", "OFFICER", "PERSONAL", "NONE"])} />
+          </Field>
+          <Field label="GPS km" hint="Only vehicles driven by LR's own drivers should be imported">
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 400 }}>
+              <input type="checkbox" checked={d.gpsKmTracked} onChange={(e) => setD({ ...d, gpsKmTracked: e.target.checked })} />
+              Import GPS km for this vehicle
+            </label>
+          </Field>
+          <Field label="Private / Commercial">
+            <Select value={d.registrationClass} onChange={setV("registrationClass")} placeholder="—" aria-label="Private or commercial"
+                    options={[{ value: "PRIVATE", label: "Private" }, { value: "COMMERCIAL", label: "Commercial" }]} />
           </Field>
           <Field label="Customer"><input value={d.customerName} onChange={set("customerName")} /></Field>
           <Field label="Status">

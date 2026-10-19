@@ -29,18 +29,28 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 public abstract class AbstractIT {
 
-    static final PostgreSQLContainer<?> PG = new PostgreSQLContainer<>("postgres:16-alpine")
+    /** Set IT_JDBC_URL (+ IT_DB_USER / IT_DB_PASSWORD) to run against an existing empty database instead of Docker. */
+    static final String EXTERNAL_URL = System.getenv("IT_JDBC_URL");
+    static final PostgreSQLContainer<?> PG = EXTERNAL_URL != null ? null : new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("fleet").withUsername("fleet").withPassword("fleet");
 
     static {
-        PG.start();
+        if (PG != null) {
+            PG.start();
+        }
     }
 
     @DynamicPropertySource
     static void props(DynamicPropertyRegistry r) throws Exception {
-        r.add("spring.datasource.url", PG::getJdbcUrl);
-        r.add("spring.datasource.username", PG::getUsername);
-        r.add("spring.datasource.password", PG::getPassword);
+        if (PG != null) {
+            r.add("spring.datasource.url", PG::getJdbcUrl);
+            r.add("spring.datasource.username", PG::getUsername);
+            r.add("spring.datasource.password", PG::getPassword);
+        } else {
+            r.add("spring.datasource.url", () -> EXTERNAL_URL);
+            r.add("spring.datasource.username", () -> System.getenv().getOrDefault("IT_DB_USER", "postgres"));
+            r.add("spring.datasource.password", () -> System.getenv().getOrDefault("IT_DB_PASSWORD", "postgres"));
+        }
         r.add("app.jwt-secret", () -> "integration-test-secret-that-is-long-enough-123456");
         r.add("app.bootstrap-admin.email", () -> "admin@lrtaxi.test");
         r.add("app.bootstrap-admin.password", () -> "AdminPass123");

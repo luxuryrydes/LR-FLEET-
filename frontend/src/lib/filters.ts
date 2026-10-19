@@ -13,16 +13,17 @@ export interface FleetFilters {
   driverId: string;
   departmentId: string;
   status: string;
+  operatorType: string;
 }
 
 export const FILTER_KEYS: (keyof FleetFilters)[] = [
-  "from", "to", "vehicle", "fuelType", "category", "ownership", "vendorId", "driverId", "departmentId", "status",
+  "from", "to", "vehicle", "fuelType", "category", "ownership", "vendorId", "driverId", "departmentId", "status", "operatorType",
 ];
 
 export function defaultFilters(): FleetFilters {
   return {
     from: daysAgoIso(29), to: todayIso(), vehicle: "", fuelType: "", category: "", ownership: "",
-    vendorId: "", driverId: "", departmentId: "", status: "",
+    vendorId: "", driverId: "", departmentId: "", status: "", operatorType: "",
   };
 }
 

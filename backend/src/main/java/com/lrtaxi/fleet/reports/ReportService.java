@@ -195,6 +195,7 @@ public class ReportService {
         if (f.driverId() != null) parts.add("driver " + f.driverId());
         if (f.departmentId() != null) parts.add("department " + f.departmentId());
         if (f.status() != null && !f.status().isBlank()) parts.add("status " + f.status());
+        if (f.operatorType() != null && !f.operatorType().isBlank()) parts.add("operator " + f.operatorType());
         return parts.isEmpty() ? "none" : String.join(", ", parts);
     }
 

@@ -12,6 +12,8 @@ export interface Lookups {
   ownershipTypes: string[];
   vehicleStatuses: string[];
   documentTypes: string[];
+  operatorTypes?: string[];
+  disposalTypes?: string[];
 }
 
 export function useLookups() {

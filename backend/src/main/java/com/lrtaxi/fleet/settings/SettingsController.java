@@ -45,16 +45,18 @@ public class SettingsController {
     @GetMapping("/lookups")
     @PreAuthorize(Roles.READ)
     public Map<String, Object> lookups() {
-        return Map.of(
-                "vehicleCategories", jdbc.query("SELECT code, name FROM vehicle_categories ORDER BY name", Rows::map),
-                "serviceCategories", jdbc.query("SELECT code, name, resets_service_interval FROM service_categories WHERE is_active ORDER BY name", Rows::map),
-                "departments", jdbc.query("SELECT id, code, name FROM departments WHERE is_active ORDER BY name", Rows::map),
-                "vendors", jdbc.query("SELECT id, name, vendor_type FROM vendors WHERE is_active ORDER BY name", Rows::map),
-                "drivers", jdbc.query("SELECT id, full_name FROM drivers WHERE is_active ORDER BY full_name", Rows::map),
-                "fuelTypes", List.of("PETROL", "DIESEL", "CNG", "CNG_PETROL", "ELECTRIC", "HYBRID", "PLUGIN_HYBRID"),
-                "energyTypes", List.of("PETROL", "DIESEL", "CNG", "ELECTRICITY"),
-                "ownershipTypes", List.of("OWNED", "LEASED", "VENDOR_ATTACHED", "RENTED"),
-                "vehicleStatuses", List.of("ACTIVE", "INACTIVE", "IDLE", "WORKSHOP", "SOLD", "SCRAPPED"),
-                "documentTypes", List.of("INSURANCE", "FITNESS", "PUC", "PERMIT", "REGISTRATION", "ROAD_TAX", "DRIVING_LICENCE", "OTHER"));
+        return Map.ofEntries(
+                Map.entry("vehicleCategories", jdbc.query("SELECT code, name FROM vehicle_categories ORDER BY name", Rows::map)),
+                Map.entry("serviceCategories", jdbc.query("SELECT code, name, resets_service_interval FROM service_categories WHERE is_active ORDER BY name", Rows::map)),
+                Map.entry("departments", jdbc.query("SELECT id, code, name FROM departments WHERE is_active ORDER BY name", Rows::map)),
+                Map.entry("vendors", jdbc.query("SELECT id, name, vendor_type FROM vendors WHERE is_active ORDER BY name", Rows::map)),
+                Map.entry("drivers", jdbc.query("SELECT id, full_name FROM drivers WHERE is_active ORDER BY full_name", Rows::map)),
+                Map.entry("fuelTypes", List.of("PETROL", "DIESEL", "CNG", "CNG_PETROL", "ELECTRIC", "HYBRID", "PLUGIN_HYBRID")),
+                Map.entry("energyTypes", List.of("PETROL", "DIESEL", "CNG", "ELECTRICITY")),
+                Map.entry("ownershipTypes", List.of("OWNED", "LEASED", "VENDOR_ATTACHED", "RENTED")),
+                Map.entry("vehicleStatuses", List.of("ACTIVE", "INACTIVE", "IDLE", "WORKSHOP", "SOLD", "SCRAPPED")),
+                Map.entry("documentTypes", List.of("INSURANCE", "FITNESS", "PUC", "PERMIT", "REGISTRATION", "ROAD_TAX", "DRIVING_LICENCE", "OTHER")),
+                Map.entry("operatorTypes", List.of("OWN_DRIVER", "VENDOR", "GOVT_DRIVER", "OFFICER", "PERSONAL", "NONE")),
+                Map.entry("disposalTypes", List.of("SOLD", "SCRAPPED", "RETURNED_TO_VENDOR", "TRANSFERRED", "OTHER")));
     }
 }
