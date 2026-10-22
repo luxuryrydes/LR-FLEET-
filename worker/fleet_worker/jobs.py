@@ -17,7 +17,7 @@ from psycopg.types.json import Jsonb
 
 from .config import Config
 from .excel import FileFormatError, describe_file, read_rows
-from .parsers import ParseResult, VehicleIndex, parse_fuel, parse_gps, parse_master
+from .parsers import ParseResult, VehicleIndex, fill_key, mark_already_recorded, parse_fuel, parse_gps, parse_master
 from .reconcile import reconcile, write_workbook
 from .storage import Storage
 
@@ -140,7 +140,10 @@ def _with_file(storage: Storage, b: dict, fn):
     try:
         return fn(path)
     finally:
-        path.unlink(missing_ok=True)
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:  # a temp file that cannot be removed yet must not fail the job
+            log.warning("could not remove temporary file %s", path)
 
 
 def detect_headers(conn: psycopg.Connection, storage: Storage, batch_id: int) -> dict:
@@ -192,9 +195,27 @@ def parse_import(conn: psycopg.Connection, storage: Storage, batch_id: int) -> d
     today = date.today()
     parser = {"GPS_KM": parse_gps, "FUEL": parse_fuel, "VEHICLE_MASTER": parse_master}[b["import_type"]]
     result = parser(rows, b["header_row"] or 1, mapping, options, index, settings, today)
+    if b["import_type"] == "FUEL":
+        mark_already_recorded(result.rows, existing_fills(conn, result))
     save_staging(conn, batch_id, result)
     conn.commit()
     return {"batchId": batch_id, **result.counts()}
+
+
+def existing_fills(conn: psycopg.Connection, result: ParseResult) -> dict:
+    """Saved fuel transactions for the vehicles and dates in this file, keyed like parsers.fill_key."""
+    dates = [r.parsed["date"] for r in result.rows if r.parsed and r.vehicle_id]
+    vids = list({r.vehicle_id for r in result.rows if r.parsed and r.vehicle_id})
+    if not dates or not vids:
+        return {}
+    out: dict = {}
+    with conn.cursor() as cur:
+        cur.execute("""SELECT vehicle_id, txn_date, energy_type, quantity, expense_amount, txn_time FROM fuel_transactions
+                       WHERE NOT is_void AND vehicle_id = ANY(%s) AND txn_date BETWEEN %s AND %s""", (vids, min(dates), max(dates)))
+        for r in cur.fetchall():
+            key = fill_key(r["vehicle_id"], r["txn_date"].isoformat(), r["energy_type"], r["quantity"], r["expense_amount"])
+            out.setdefault(key, []).append(r["txn_time"].strftime("%H:%M:%S") if r["txn_time"] else None)
+    return out
 
 
 def save_staging(conn: psycopg.Connection, batch_id: int, result: ParseResult) -> None:

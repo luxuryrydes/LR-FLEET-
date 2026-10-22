@@ -6,7 +6,7 @@ import re
 GPS_FIELDS = ["vehicle", "date", "km", "tripStart"]
 FUEL_FIELDS = ["vehicle", "date", "time", "energyType", "quantity", "unitPrice", "grossAmount", "discountAmount",
                "taxAmount", "invoiceAmount", "odometerKm", "isFullTank", "stationName", "invoiceNumber",
-               "transactionRef", "paymentMethod", "notes"]
+               "transactionRef", "paymentMethod", "cardNumber", "notes"]
 MASTER_FIELDS = ["registration", "model", "fuelType", "modelYear", "operatorLabel", "driverName", "driverPhone", "department",
                  "registrationClass", "make", "category", "chassisNumber", "engineNumber", "gpsDeviceName", "soldDate", "soldTo", "remarks"]
 
@@ -22,7 +22,7 @@ SYNONYMS: dict[str, dict[str, list[str]]] = {
     },
     "FUEL": {
         "vehicle": ["vehicleno", "vehiclenumber", "vehicle", "registrationno", "regno", "carno"],
-        "date": ["date", "requestdate", "transactiondate", "txndate", "filldate", "billdate", "invoicedate"],
+        "date": ["date", "transactiondate", "txndate", "filldate", "requestdate", "billdate", "invoicedate"],
         "time": ["time", "transactiontime", "txntime"],
         "energyType": ["fueltype", "fuel", "product", "energytype", "energy"],
         "quantity": ["quantity", "qty", "litres", "liters", "volume", "kg", "kwh", "units"],
@@ -35,8 +35,9 @@ SYNONYMS: dict[str, dict[str, list[str]]] = {
         "isFullTank": ["fulltank", "tankfull", "full", "isfulltank"],
         "stationName": ["station", "fuelstation", "pump", "outlet", "supplier", "vendor", "dealer", "ro", "roname"],
         "invoiceNumber": ["invoiceno", "invoice", "invoicenumber", "billno", "billnumber", "receiptno"],
-        "transactionRef": ["transactionno", "transactionid", "txnid", "txnno", "referenceno", "refno", "utr"],
-        "paymentMethod": ["paymentmethod", "paymentmode", "payment", "mode", "paidby"],
+        "transactionRef": ["transactionno", "transactionid", "txnid", "txnno", "slipno", "reqnoslipno", "referenceno", "refno", "utr"],
+        "paymentMethod": ["paymentmethod", "paymentmode", "payment", "paidby"],
+        "cardNumber": ["cardnumber", "cardno", "fuelcard", "fleetcard", "smartcard"],
         "notes": ["notes", "remarks", "comment", "comments", "narration"],
     },
     "VEHICLE_MASTER": {

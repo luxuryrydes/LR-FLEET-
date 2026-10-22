@@ -1,0 +1,23 @@
+{
+  "_comment": "Fuel names as written by IGL, BPCL, IOCL, HPCL statements -> energy type. Asserted by Java EnergyType.parse and Python parse_energy.",
+  "cases": [
+    { "raw": "AUTO CNG - BPCL", "energy": "CNG" },
+    { "raw": "PETROL - BPCL", "energy": "PETROL" },
+    { "raw": "DIESEL - BPCL", "energy": "DIESEL" },
+    { "raw": "CNG", "energy": "CNG" },
+    { "raw": "C.N.G.", "energy": "CNG" },
+    { "raw": "Petrol", "energy": "PETROL" },
+    { "raw": "MS", "energy": "PETROL" },
+    { "raw": "HSD", "energy": "DIESEL" },
+    { "raw": "Hi Speed Diesel", "energy": "DIESEL" },
+    { "raw": "XtraPremium", "energy": "PETROL" },
+    { "raw": "XTRAMILE", "energy": "DIESEL" },
+    { "raw": "Speed 97", "energy": "PETROL" },
+    { "raw": "Power Petrol - HPCL", "energy": "PETROL" },
+    { "raw": "EV Charging", "energy": "ELECTRICITY" },
+    { "raw": "Electricity", "energy": "ELECTRICITY" },
+    { "raw": "kWh", "energy": "ELECTRICITY" },
+    { "raw": "Smart Card Sale", "energy": null },
+    { "raw": "", "energy": null }
+  ]
+}

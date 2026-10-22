@@ -151,12 +151,27 @@ public class FuelService {
 
         String invoice = blankToNull(in.invoiceNumber());
         String txnRef = blankToNull(in.transactionRef());
-        String dedupe = dedupeKey(in.vehicleId(), in.txnDate(), energy, in.quantity(), amt.expenseAmount(), invoice);
+        String dedupe = dedupeKey(in.vehicleId(), in.txnDate(), energy, in.quantity(), amt.expenseAmount(), invoice, txnRef, in.txnTime());
 
         List<Long> same = jdbc.queryForList("SELECT id FROM fuel_transactions WHERE dedupe_key = :k AND NOT is_void",
                 Map.of("k", dedupe), Long.class);
         if (!same.isEmpty()) {
             return new SaveResult(same.get(0), "DUPLICATE", List.of("Identical transaction already recorded"));
+        }
+        // The same physical fill can arrive from two statements (e.g. IGL smart-card file and BPCL slip export) with
+        // different invoice/slip numbers. Same vehicle, day, fuel, quantity and amount - and the same time when both
+        // have one - is one fill.
+        List<Long> sameFill = jdbc.queryForList("""
+                SELECT id FROM fuel_transactions
+                WHERE vehicle_id = :v AND txn_date = :d AND energy_type = :e AND quantity = :q AND expense_amount = :amt AND NOT is_void
+                  AND (CAST(:t AS time) IS NULL OR txn_time IS NULL OR txn_time = CAST(:t AS time))
+                ORDER BY id LIMIT 1""",
+                new MapSqlParameterSource("v", in.vehicleId()).addValue("d", in.txnDate()).addValue("e", energy.name())
+                        .addValue("q", in.quantity()).addValue("amt", amt.expenseAmount())
+                        .addValue("t", in.txnTime() == null ? null : in.txnTime().toString()), Long.class);
+        if (!sameFill.isEmpty()) {
+            return new SaveResult(sameFill.get(0), "DUPLICATE",
+                    List.of("Same fill already recorded from another statement (transaction " + sameFill.get(0) + ")"));
         }
         if (txnRef != null) {
             List<Long> ref = jdbc.queryForList("SELECT id FROM fuel_transactions WHERE upper(transaction_ref) = upper(:r) AND NOT is_void",
@@ -242,9 +257,12 @@ public class FuelService {
         return null;
     }
 
-    static String dedupeKey(long vehicleId, LocalDate date, EnergyType energy, BigDecimal qty, BigDecimal amount, String invoice) {
+    /** Identity of one transaction. A different transaction number or time is a different transaction. */
+    static String dedupeKey(long vehicleId, LocalDate date, EnergyType energy, BigDecimal qty, BigDecimal amount, String invoice,
+                            String txnRef, java.time.LocalTime time) {
         String raw = vehicleId + "|" + date + "|" + energy + "|" + qty.stripTrailingZeros().toPlainString() + "|"
-                + amount.stripTrailingZeros().toPlainString() + "|" + (invoice == null ? "" : invoice.toUpperCase(Locale.ROOT));
+                + amount.stripTrailingZeros().toPlainString() + "|" + (invoice == null ? "" : invoice.toUpperCase(Locale.ROOT))
+                + "|" + (txnRef == null ? "" : txnRef.toUpperCase(Locale.ROOT)) + "|" + (time == null ? "" : time.withNano(0));
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(raw.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException e) {

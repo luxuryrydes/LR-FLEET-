@@ -93,6 +93,25 @@ Optional columns: Make, Category, Chassis No, Engine No, GPS Device Name, Sold D
 The status, driver type and GPS-km rules are in [CALCULATION_RULES.md §13](CALCULATION_RULES.md). The preview shows, for every
 row, whether the vehicle is new or an update, what its status will be, and whether its GPS km will be imported.
 
+## Fuel-company statements used by LR Taxi
+
+| Statement | How to import | What happens automatically |
+|---|---|---|
+| **IGL smart-card file** (`Txn Date, Outlet Name, Card Number, Vehicle No., Txn Type, Txn Id, Amount, Quantity`) | Import fuel file, then set **Fuel for rows without a fuel type = CNG** (the file has no fuel column) | Txn Id becomes the transaction no., Outlet the station, Amount the invoice amount; the card number is saved in notes and payment = Fuel card |
+| **BPCL slip export / "viewAndAlterReport"** (`Vehicle No, Fuel Type, Slip No, Transaction Date, Quantity, Price, Value, Discount, Invoice No., Request Date, OD Meter`) | Import fuel file (mapping is automatic) | "AUTO CNG - BPCL" / "PETROL - BPCL" / "DIESEL - BPCL" recognised; the fill date is the **Transaction Date** (not Request Date); expense = Value − Discount (the ₹1/L petrol and diesel discount); the **Total** line is skipped; files with a damaged formatting section (BPCL portal exports) are still read |
+
+**The same fill in two statements is saved once.** If a fill has already been imported, for example from the IGL card
+file, the same fill arriving in another layout (e.g. `NEw Fuel.xlsx`, which repeats the IGL fills in BPCL format) is
+skipped as *already recorded*. A fill counts as the same when the vehicle, date, fuel, quantity and amount match, and the
+time matches whenever both statements give one. Importing both files therefore never doubles the fuel or the expense.
+
+**Two charges are kept.** Two transactions with different transaction numbers or times are two charges, even when the
+quantity and amount are identical. If they are less than 10 minutes apart, both are saved and flagged as a
+*possible double charge* (row warning plus a HIGH alert) so you can check with the fuel company.
+
+Rows are rejected with a reason when the vehicle is unknown (e.g. "7614") or the fuel doesn't fit the vehicle
+(e.g. CNG on a vehicle registered as Electric). These rows usually mean the card is linked to the wrong vehicle.
+
 ## Error report columns
 
 `Row` (spreadsheet row number), `Field`, `Error code`, `Reason`, `Value`, `Stage` (`PARSE` = worker, `COMMIT` = Java).

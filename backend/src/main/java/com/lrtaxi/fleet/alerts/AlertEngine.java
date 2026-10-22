@@ -37,7 +37,7 @@ public class AlertEngine {
     /** Types this engine owns; open alerts of these types that are no longer detected are auto-resolved. */
     static final List<String> ENGINE_TYPES = List.of("GPS_NO_FUEL", "FUEL_NO_KM", "HIGH_COST_PER_KM", "FALLING_MILEAGE",
             "REPEATED_INVOICE", "INVALID_ODOMETER", "NO_GPS_REPORT", "SERVICE_DUE", "SERVICE_OVERDUE", "MISSING_SERVICE_BASELINE",
-            "HIGH_MAINTENANCE_COST", "FUEL_QTY_OUT_OF_RANGE", "DOCUMENT_EXPIRY");
+            "HIGH_MAINTENANCE_COST", "FUEL_QTY_OUT_OF_RANGE", "DOCUMENT_EXPIRY", "POSSIBLE_DOUBLE_CHARGE");
 
     private final NamedParameterJdbcTemplate jdbc;
     private final AlertService alerts;
@@ -183,6 +183,25 @@ public class AlertEngine {
                 "The same invoice number appears on several transactions. Verify the invoices and void any duplicate.",
                 rule("Invoice number must be unique", "1", r.get("n"), period),
                 ids("FUEL_TRANSACTION", (String) r.get("ids")), null, null))));
+
+        // 5b. Possible double charges: same vehicle, fuel, quantity and amount within 10 minutes (different transactions)
+        count(counts, "POSSIBLE_DOUBLE_CHARGE", each(jdbc.queryForList("""
+                SELECT a.id AS a_id, b.id AS b_id, a.vehicle_id, v.registration_number, a.txn_date, a.quantity, a.unit, a.expense_amount
+                FROM fuel_transactions a
+                JOIN fuel_transactions b ON b.vehicle_id = a.vehicle_id AND b.txn_date = a.txn_date AND b.energy_type = a.energy_type
+                     AND b.quantity = a.quantity AND b.expense_amount = a.expense_amount AND b.id > a.id AND NOT b.is_void
+                     AND a.txn_time IS NOT NULL AND b.txn_time IS NOT NULL
+                     AND abs(extract(epoch FROM (b.txn_time - a.txn_time))) <= 600
+                JOIN vehicles v ON v.id = a.vehicle_id
+                WHERE NOT a.is_void AND a.txn_date BETWEEN :from AND :to""", p), r -> alerts.raise(new AlertService.AlertSpec(
+                "POSSIBLE_DOUBLE_CHARGE", "HIGH", ((Number) r.get("vehicle_id")).longValue(), "DOUBLE_CHARGE|" + r.get("a_id") + "|" + r.get("b_id"),
+                r.get("registration_number") + ": possible double charge of " + IndianFormat.rupees((BigDecimal) r.get("expense_amount")),
+                "Two transactions on " + IndianFormat.date(((java.sql.Date) r.get("txn_date")).toLocalDate()) + " for the same quantity ("
+                        + r.get("quantity") + " " + r.get("unit") + ") and amount within 10 minutes. Both are counted; check with the fuel"
+                        + " company whether the card was charged twice.",
+                rule("Same vehicle, fuel, quantity and amount within 10 minutes", "10 minutes", "2 transactions", period),
+                List.of(link("FUEL_TRANSACTION", ((Number) r.get("a_id")).longValue(), "Transaction " + r.get("a_id")),
+                        link("FUEL_TRANSACTION", ((Number) r.get("b_id")).longValue(), "Transaction " + r.get("b_id"))), null, null))));
 
         // 6. Invalid / decreasing odometer readings
         count(counts, "INVALID_ODOMETER", each(jdbc.queryForList("""

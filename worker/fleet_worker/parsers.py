@@ -147,16 +147,28 @@ def _cell(values: dict, mapping: dict, f: str) -> object:
     return values.get(col) if col else None
 
 
-def _iter_records(rows: list[list[object]], header_row: int):
-    """Yields (row_number, {header: value}) for non-empty data rows below the header row (1-based)."""
+_TOTAL = re.compile(r"^(grand\s*|sub\s*)?totals?:?$", re.IGNORECASE)
+
+
+def _is_summary_row(r: list[object]) -> bool:
+    """'Total' / 'Grand Total' lines that statements append under the data."""
+    return any(isinstance(c, str) and _TOTAL.match(c.strip()) for c in r)
+
+
+def _iter_records(rows: list[list[object]], header_row: int, key_fields: tuple = ()):
+    """Yields (row_number, {header: value}) for data rows below the header row (1-based). Skips empty rows, total
+    lines and rows whose key columns (e.g. vehicle and date) are all blank."""
     if not rows or header_row < 1 or header_row > len(rows):
         return
     headers = headers_from(rows[header_row - 1])
     for i in range(header_row, len(rows)):
         r = rows[i]
-        if all(c is None for c in r):
+        if all(c is None or (isinstance(c, str) and not c.strip()) for c in r) or _is_summary_row(r):
             continue
-        yield i + 1, dict(zip(headers, r))
+        values = dict(zip(headers, r))
+        if key_fields and all(values.get(k) is None or str(values.get(k)).strip() in ("", "0") for k in key_fields if k):
+            continue
+        yield i + 1, values
 
 
 def _resolve_vehicle(row: StagingRow, raw_vehicle: object, index: VehicleIndex) -> Optional[int]:
@@ -218,7 +230,7 @@ def parse_gps(rows: list[list[object]], header_row: int, mapping: dict, options:
     mode = options.get("recordMode", "DAILY_TOTAL")
     max_km = Decimal(str(settings.get("gps.max_daily_km", "1500")))
     out: list[StagingRow] = []
-    for row_number, values in _iter_records(rows, header_row):
+    for row_number, values in _iter_records(rows, header_row, (mapping.get("vehicle"), mapping.get("date"))):
         row = StagingRow(row_number, {k: jsonable(v) for k, v in values.items()})
         raw_vehicle = _cell(values, mapping, "vehicle")
         vid = _resolve_vehicle(row, raw_vehicle, index)
@@ -304,8 +316,9 @@ def _dedupe_gps(rows: list[StagingRow], mode: str) -> None:
 def parse_fuel(rows: list[list[object]], header_row: int, mapping: dict, options: dict, index: VehicleIndex,
                settings: dict, today: date) -> ParseResult:
     tolerance = Decimal(str(settings.get("fuel.amount_tolerance", "1.00")))
+    default_energy = options.get("defaultEnergyType") or None
     out: list[StagingRow] = []
-    for row_number, values in _iter_records(rows, header_row):
+    for row_number, values in _iter_records(rows, header_row, (mapping.get("vehicle"), mapping.get("date"))):
         row = StagingRow(row_number, {k: jsonable(v) for k, v in values.items()})
         raw_vehicle = _cell(values, mapping, "vehicle")
         vid = _resolve_vehicle(row, raw_vehicle, index)
@@ -321,6 +334,8 @@ def parse_fuel(rows: list[list[object]], header_row: int, mapping: dict, options
             txn_time = dt.strftime("%H:%M:%S")
 
         raw_energy = _cell(values, mapping, "energyType")
+        if raw_energy is None and default_energy:
+            raw_energy = default_energy
         energy = parse_energy(raw_energy)
         vehicle_fuel = index.fuel_type.get(vid) if vid else None
         if energy is None:
@@ -378,8 +393,9 @@ def parse_fuel(rows: list[list[object]], header_row: int, mapping: dict, options
                     stationName=_text(_cell(values, mapping, "stationName")),
                     invoiceNumber=_text(_cell(values, mapping, "invoiceNumber")),
                     transactionRef=_text(_cell(values, mapping, "transactionRef")),
-                    paymentMethod=parse_payment(_cell(values, mapping, "paymentMethod")),
-                    notes=_text(_cell(values, mapping, "notes")))
+                    paymentMethod=parse_payment(_cell(values, mapping, "paymentMethod"))
+                    or ("FUEL_CARD" if _text(_cell(values, mapping, "cardNumber")) else None),
+                    notes=_join_notes(_text(_cell(values, mapping, "notes")), _text(_cell(values, mapping, "cardNumber"))))
                 row.parsed = to_json(rec)
             except ValidationError as e:
                 err = e.errors()[0]
@@ -389,13 +405,85 @@ def parse_fuel(rows: list[list[object]], header_row: int, mapping: dict, options
     return ParseResult(out)
 
 
+def _join_notes(notes: Optional[str], card: Optional[str]) -> Optional[str]:
+    parts = [x for x in (notes, f"Fuel card {card}" if card else None) if x]
+    return "; ".join(parts)[:1000] if parts else None
+
+
+def expense_of(p: dict) -> Optional[Decimal]:
+    """Same precedence as Java FuelAmounts: invoice, else gross - discount + tax, else qty x rate - discount + tax."""
+    d = lambda k: Decimal(p[k]) if p.get(k) not in (None, "") else None  # noqa: E731
+    disc, tax = d("discountAmount") or Decimal(0), d("taxAmount") or Decimal(0)
+    if d("invoiceAmount") is not None:
+        return d("invoiceAmount").quantize(CENT, rounding=ROUND_HALF_UP)
+    if d("grossAmount") is not None:
+        return (d("grossAmount") - disc + tax).quantize(CENT, rounding=ROUND_HALF_UP)
+    if d("unitPrice") is not None and d("quantity") is not None:
+        return ((d("quantity") * d("unitPrice")).quantize(CENT, rounding=ROUND_HALF_UP) - disc + tax).quantize(CENT, rounding=ROUND_HALF_UP)
+    return None
+
+
+def fill_key(vehicle_id, date_iso: str, energy: str, quantity, expense) -> tuple:
+    """Identity of a physical fill across statements (IGL card file vs BPCL slip export)."""
+    return (vehicle_id, date_iso, energy, Decimal(str(quantity)).quantize(Decimal("0.001")), Decimal(str(expense)).quantize(CENT))
+
+
+def mark_already_recorded(rows: list["StagingRow"], existing: dict[tuple, list[Optional[str]]]) -> None:
+    """Marks fuel rows already saved from another statement (same vehicle, day, fuel, quantity, amount and time when
+    both have one). The Java commit makes the same check authoritatively."""
+    for r in rows:
+        if r.rejected or r.parsed is None or r.status == "DUPLICATE":
+            continue
+        exp = expense_of(r.parsed)
+        if exp is None:
+            continue
+        times = existing.get(fill_key(r.vehicle_id, r.parsed["date"], r.parsed["energyType"], r.parsed["quantity"], exp))
+        if times is None:
+            continue
+        t = r.parsed.get("time")
+        if t is None or any(x is None or x == t for x in times):
+            r.status = "DUPLICATE"
+            r.info("ALREADY_RECORDED", "Already recorded: the same fill (vehicle, date, time, quantity and amount) was "
+                                       "imported from another statement; it will not be counted twice")
+
+
 def _fuel_amount_key(p: dict) -> str:
     if p.get("invoiceAmount") is not None:
         return p["invoiceAmount"]
     return f"{p.get('grossAmount')}|{p.get('unitPrice')}|{p.get('discountAmount')}"
 
 
+def _minutes(t: Optional[str]) -> Optional[int]:
+    if not t:
+        return None
+    h, m, *_ = t.split(":")
+    return int(h) * 60 + int(m)
+
+
+def _flag_double_charges(rows: list[StagingRow]) -> None:
+    """Same vehicle, fuel, quantity and amount within 10 minutes under different transaction numbers: both are kept
+    (the card was charged twice) and flagged for checking with the fuel company."""
+    seen: dict[tuple, list[StagingRow]] = {}
+    for r in rows:
+        if r.rejected or r.parsed is None or r.status == "DUPLICATE":
+            continue
+        p = r.parsed
+        k = (r.vehicle_id, p["date"], p["energyType"], p["quantity"], _fuel_amount_key(p))
+        for o in seen.get(k, []):
+            a, b = _minutes(p.get("time")), _minutes(o.parsed.get("time"))
+            if a is not None and b is not None and abs(a - b) <= 10:
+                msg = f"Possible double charge: same vehicle, quantity and amount as row {o.row_number} within 10 minutes"
+                r.warn("POSSIBLE_DOUBLE_CHARGE", "quantity", msg)
+                o.warn("POSSIBLE_DOUBLE_CHARGE", "quantity", f"Possible double charge: see row {r.row_number}")
+        seen.setdefault(k, []).append(r)
+
+
 def _dedupe_fuel(rows: list[StagingRow]) -> None:
+    _dedupe_fuel_exact(rows)
+    _flag_double_charges(rows)
+
+
+def _dedupe_fuel_exact(rows: list[StagingRow]) -> None:
     by_key: dict[str, StagingRow] = {}
     by_ref: dict[str, StagingRow] = {}
     by_invoice: dict[str, StagingRow] = {}
@@ -403,8 +491,10 @@ def _dedupe_fuel(rows: list[StagingRow]) -> None:
         if r.rejected or r.parsed is None:
             continue
         p = r.parsed
+        # Different transaction numbers or times are different transactions (two card swipes are two charges).
         key = "|".join(str(x) for x in (r.vehicle_id, p["date"], p["energyType"], p["quantity"], _fuel_amount_key(p),
-                                         (p.get("invoiceNumber") or "").upper()))
+                                         (p.get("invoiceNumber") or "").upper(), (p.get("transactionRef") or "").upper(),
+                                         p.get("time") or ""))
         r.group_key = key[:200]
         if key in by_key:
             r.status = "DUPLICATE"

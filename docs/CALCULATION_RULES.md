@@ -75,7 +75,12 @@ Mismatches are flagged (`amount_mismatch`, `amount_difference`) and the transact
 with the invoice amount. If unit price is missing it is derived as `gross ÷ quantity` and marked as derived.
 
 Duplicate protection:
-* `dedupe_key` = SHA-256 of vehicle + date + energy + quantity + expense + invoice no. Re-uploading a file is skipped row by row.
+* `dedupe_key` = SHA-256 of vehicle + date + energy + quantity + expense + invoice no. + transaction no. + time.
+  Re-uploading a file is skipped row by row.
+* **Same fill from another statement** (IGL card file vs BPCL slip export): same vehicle, date, energy, quantity and expense,
+  and the same time whenever both have one. The fill is saved once and later copies are skipped as *already recorded*.
+* **Possible double charge**: same vehicle, energy, quantity and amount within 10 minutes under different transaction
+  numbers. Both are saved, because they are two real charges, and a HIGH alert lists both transactions.
 * `transaction_ref` (bank or fuel-card transaction ID) must be unique.
 * If an invoice number is already used by a *different* transaction, the row is rejected for review.
 
@@ -163,7 +168,8 @@ intervals and data-quality status attached. A low figure is a prompt to investig
 
 ## 11. Odometer progression
 
-A new reading is **untrusted** (still saved with the transaction, flagged, and alerted) if it is:
+A new reading is **untrusted** (still saved with the transaction, flagged, and alerted) if it is (readings on the same
+day are not compared, since statements without times cannot be ordered within a day):
 * lower than the previous trusted reading;
 * higher than a later trusted reading;
 * a jump greater than `(days between + 1) × gps.max_daily_km`.

@@ -111,6 +111,15 @@ class SharedSpecCasesTest {
     }
 
     @Test
+    void fuelNamesFromStatements() throws Exception {
+        for (JsonNode c : new ObjectMapper().readTree(locate("energy-cases.json")).get("cases")) {
+            EnergyType e = EnergyType.parse(c.get("raw").asText());
+            assertThat(e == null ? null : e.name()).as(c.get("raw").asText())
+                    .isEqualTo(c.get("energy").isNull() ? null : c.get("energy").asText());
+        }
+    }
+
+    @Test
     void vehicleMasterRules() throws Exception {
         JsonNode m = new ObjectMapper().readTree(locate("master-cases.json"));
         for (JsonNode c : m.get("operator")) {

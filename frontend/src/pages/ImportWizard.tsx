@@ -13,7 +13,7 @@ const FIELD_LABELS: Record<string, string> = {
   energyType: "Fuel type", quantity: "Quantity", unitPrice: "Rate / price per unit", grossAmount: "Value (before discount)",
   discountAmount: "Discount", taxAmount: "Tax", invoiceAmount: "Invoice amount / cost", odometerKm: "Odometer",
   isFullTank: "Full tank (Y/N)", stationName: "Station / supplier", invoiceNumber: "Invoice no.", transactionRef: "Transaction no.",
-  paymentMethod: "Payment method", notes: "Notes",
+  paymentMethod: "Payment method", cardNumber: "Fuel card number", notes: "Notes",
   registration: "Registration no.", model: "Vehicle type / model", fuelType: "Fuel type", modelYear: "Model year",
   operatorLabel: "Vendor / Driver (DRIVER, VENDOR, WORKSHOP…)", driverName: "Driver / vendor name", driverPhone: "Driver / vendor contact",
   department: "Department", registrationClass: "Private / Commercial", make: "Make", category: "Category", chassisNumber: "Chassis no.",
@@ -139,6 +139,8 @@ export function MappingStep({ b, onDone }: { b: Row; onDone: () => void }) {
   const [headerRow, setHeaderRow] = useState<number>(sheet?.headerRow ?? 1);
   const [mapping, setMapping] = useState<Record<string, string>>(sheet?.suggestedMapping?.[type] ?? {});
   const [mode, setMode] = useState<"DAILY_TOTAL" | "TRIP">("DAILY_TOTAL");
+  // Files such as the IGL smart-card statement have no fuel column: every row is CNG.
+  const [defaultEnergy, setDefaultEnergy] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
@@ -149,7 +151,7 @@ export function MappingStep({ b, onDone }: { b: Row; onDone: () => void }) {
     }
   }, [sheetName]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const missing = REQUIRED[type].filter((f) => !mapping[f]);
+  const missing = REQUIRED[type].filter((f) => !mapping[f] && !(f === "energyType" && defaultEnergy));
   const needsAmount = type === "FUEL" && !mapping.invoiceAmount && !mapping.grossAmount && !mapping.unitPrice;
 
   const submit = async () => {
@@ -157,7 +159,7 @@ export function MappingStep({ b, onDone }: { b: Row; onDone: () => void }) {
     setError(null);
     try {
       const clean = Object.fromEntries(Object.entries(mapping).filter(([, v]) => v));
-      await api.post(`/api/imports/${b.id}/mapping`, { sheet: sheet.name, headerRow, mapping: clean, options: type === "GPS_KM" ? { recordMode: mode } : {} });
+      await api.post(`/api/imports/${b.id}/mapping`, { sheet: sheet.name, headerRow, mapping: clean, options: type === "GPS_KM" ? { recordMode: mode } : type === "FUEL" && defaultEnergy ? { defaultEnergyType: defaultEnergy } : {} });
       onDone();
     } catch (e) {
       setError(e);
@@ -179,6 +181,17 @@ export function MappingStep({ b, onDone }: { b: Row; onDone: () => void }) {
         <Field label="Header row" hint="Detected automatically; change if titles sit above the table">
           <input type="number" min={1} value={headerRow} onChange={(e) => setHeaderRow(Number(e.target.value) || 1)} />
         </Field>
+        {type === "FUEL" && (
+          <Field label="Fuel for rows without a fuel type" hint="e.g. CNG for the IGL smart-card statement, which has no fuel column">
+            <select value={defaultEnergy} onChange={(e) => setDefaultEnergy(e.target.value)} aria-label="Fuel for all rows">
+              <option value="">— use the file's fuel column —</option>
+              <option value="CNG">CNG</option>
+              <option value="PETROL">Petrol</option>
+              <option value="DIESEL">Diesel</option>
+              <option value="ELECTRICITY">Electricity (kWh)</option>
+            </select>
+          </Field>
+        )}
         {type === "GPS_KM" && (
           <Field label="What does each row represent?" required>
             <select value={mode} onChange={(e) => setMode(e.target.value as "DAILY_TOTAL" | "TRIP")} aria-label="Record mode">

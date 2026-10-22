@@ -16,16 +16,32 @@ class FileFormatError(Exception):
     """The file cannot be read; retrying will not help."""
 
 
+def _open_xlsx(path: Path):
+    """Opens .xlsx in read-only mode. Some portal exports (e.g. BPCL 'viewAndAlterReport') have a malformed style
+    sheet that openpyxl rejects; values are still fine, so retry without styles (dates then arrive as Excel serial
+    numbers, which parse_datetime understands)."""
+    from openpyxl import load_workbook
+    # Read into memory: a failed first attempt must not leave the file locked (Windows) for the retry or cleanup.
+    data = io.BytesIO(Path(path).read_bytes())
+    try:
+        return load_workbook(data, read_only=True, data_only=True)
+    except Exception as first:  # noqa: BLE001
+        from unittest import mock
+        import openpyxl.reader.excel as reader
+        try:
+            data.seek(0)
+            with mock.patch.object(reader, "apply_stylesheet", lambda archive, wb: None):
+                return load_workbook(data, read_only=True, data_only=True)
+        except Exception:  # noqa: BLE001
+            raise FileFormatError(f"Cannot open Excel file: {first}") from first
+
+
 def sheet_names(path: Path) -> list[str]:
     ext = path.suffix.lower()
     if ext == ".csv":
         return ["CSV"]
     if ext == ".xlsx":
-        from openpyxl import load_workbook
-        try:
-            wb = load_workbook(path, read_only=True, data_only=True)
-        except Exception as e:  # noqa: BLE001 - surface a friendly message for any corrupt workbook
-            raise FileFormatError(f"Cannot open Excel file: {e}") from e
+        wb = _open_xlsx(path)
         try:
             return list(wb.sheetnames)
         finally:
@@ -42,11 +58,7 @@ def read_rows(path: Path, sheet: str | None = None, limit: int | None = None) ->
     if ext == ".csv":
         return _read_csv(path, limit)
     if ext == ".xlsx":
-        from openpyxl import load_workbook
-        try:
-            wb = load_workbook(path, read_only=True, data_only=True)
-        except Exception as e:  # noqa: BLE001
-            raise FileFormatError(f"Cannot open Excel file: {e}") from e
+        wb = _open_xlsx(path)
         try:
             if sheet is not None and sheet not in wb.sheetnames:
                 raise FileFormatError(f"Worksheet '{sheet}' not found")

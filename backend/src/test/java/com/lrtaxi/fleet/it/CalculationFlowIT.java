@@ -143,6 +143,36 @@ class CalculationFlowIT extends AbstractIT {
     }
 
     @Test
+    void sameFillFromTwoStatementsIsSavedOnceButTwoCardChargesAreBothKept() throws Exception {
+        long v = createVehicle("HR51ST0001", "CNG_PETROL");
+        Map<String, Object> igl = fuel(v, 2, "CNG", "4.090", "355.76", null);
+        igl.put("txnTime", "00:54:12");
+        igl.put("transactionRef", "65977613");
+        call(post("/api/fuel"), adminToken, igl, status().isOk());
+        // Same fill in the BPCL slip export: different slip/invoice numbers, same vehicle, time, quantity and amount
+        Map<String, Object> bpcl = fuel(v, 2, "CNG", "4.090", null, null);
+        bpcl.put("txnTime", "00:54:12");
+        bpcl.put("unitPrice", "86.98");
+        bpcl.put("grossAmount", "355.76");
+        bpcl.put("invoiceNumber", "IGL/SLP/1317");
+        bpcl.put("transactionRef", "IGL1317");
+        call(post("/api/fuel"), adminToken, bpcl, status().isConflict());
+        // Two charges two seconds apart with different transaction ids are both real
+        Map<String, Object> c1 = fuel(v, 3, "CNG", "2.785", "242.23", null);
+        c1.put("txnTime", "17:32:59");
+        c1.put("transactionRef", "66366785");
+        Map<String, Object> c2 = fuel(v, 3, "CNG", "2.785", "242.23", null);
+        c2.put("txnTime", "17:33:01");
+        c2.put("transactionRef", "66366788");
+        call(post("/api/fuel"), adminToken, c1, status().isOk());
+        call(post("/api/fuel"), adminToken, c2, status().isOk());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM fuel_transactions WHERE vehicle_id = ? AND NOT is_void", Long.class, v)).isEqualTo(3);
+        call(post("/api/alerts/run"), adminToken, null, status().isOk());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM alerts WHERE alert_type = 'POSSIBLE_DOUBLE_CHARGE' AND vehicle_id = ?",
+                Long.class, v)).isEqualTo(1);
+    }
+
+    @Test
     void incompatibleFuelRejected() throws Exception {
         long v = createVehicle("KL07CC0002", "ELECTRIC");
         JsonNode err = call(post("/api/fuel"), adminToken, fuel(v, 0, "PETROL", "20", "2000", null), status().isBadRequest());

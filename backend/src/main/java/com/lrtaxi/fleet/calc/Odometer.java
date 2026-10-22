@@ -31,15 +31,19 @@ public final class Odometer {
     private Odometer() {
     }
 
-    /** Validates a new reading against existing trusted readings of the same vehicle. */
+    /**
+     * Validates a new reading against existing trusted readings of the same vehicle. Readings on the same day are not
+     * compared with each other: statements without times (e.g. a CNG and a petrol fill on one BPCL date) cannot be
+     * ordered within the day.
+     */
     public static Check check(List<Reading> existing, LocalDate date, BigDecimal km, BigDecimal maxDailyKm) {
         Reading prev = null;
         Reading next = null;
         for (Reading r : existing) {
-            if (!r.trusted()) {
+            if (!r.trusted() || r.date().isEqual(date)) {
                 continue;
             }
-            if (!r.date().isAfter(date)) {
+            if (r.date().isBefore(date)) {
                 if (prev == null || ORDER.compare(r, prev) > 0) {
                     prev = r;
                 }

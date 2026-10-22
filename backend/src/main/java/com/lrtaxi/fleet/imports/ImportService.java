@@ -52,7 +52,7 @@ public class ImportService {
     public static final Set<String> GPS_FIELDS = Set.of("vehicle", "date", "km", "tripStart");
     public static final Set<String> FUEL_FIELDS = Set.of("vehicle", "date", "time", "energyType", "quantity", "unitPrice", "grossAmount",
             "discountAmount", "taxAmount", "invoiceAmount", "odometerKm", "isFullTank", "stationName", "invoiceNumber",
-            "transactionRef", "paymentMethod", "notes");
+            "transactionRef", "paymentMethod", "cardNumber", "notes");
     public static final Set<String> MASTER_FIELDS = Set.of("registration", "model", "fuelType", "modelYear", "operatorLabel", "driverName",
             "driverPhone", "department", "registrationClass", "make", "category", "chassisNumber", "engineNumber", "gpsDeviceName",
             "soldDate", "soldTo", "remarks");
@@ -166,9 +166,14 @@ public class ImportService {
                 throw ApiException.badRequest("UNKNOWN_FIELD", "Unknown target field '" + k + "'");
             }
         }
+        Object defaultEnergy = req.options() == null ? null : req.options().get("defaultEnergyType");
+        boolean hasDefaultEnergy = defaultEnergy != null && Set.of("PETROL", "DIESEL", "CNG", "ELECTRICITY").contains(String.valueOf(defaultEnergy));
+        if (defaultEnergy != null && !String.valueOf(defaultEnergy).isBlank() && !hasDefaultEnergy) {
+            throw ApiException.badRequest("INVALID_OPTION", "Fuel for all rows must be PETROL, DIESEL, CNG or ELECTRICITY");
+        }
         List<String> required = switch (type) {
             case "GPS_KM" -> List.of("vehicle", "date", "km");
-            case "FUEL" -> List.of("vehicle", "date", "energyType", "quantity");
+            case "FUEL" -> hasDefaultEnergy ? List.of("vehicle", "date", "quantity") : List.of("vehicle", "date", "energyType", "quantity");
             default -> List.of("registration", "model", "fuelType");
         };
         for (String r : required) {

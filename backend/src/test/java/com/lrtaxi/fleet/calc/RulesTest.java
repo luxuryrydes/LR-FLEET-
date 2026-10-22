@@ -98,6 +98,8 @@ class RulesTest {
         assertThat(Odometer.check(existing, T.plusDays(5), b("9990"), max).problem()).isEqualTo(Odometer.Problem.DECREASES_FROM_PREVIOUS);
         assertThat(Odometer.check(existing, T.plusDays(5), b("11200"), max).problem()).isEqualTo(Odometer.Problem.EXCEEDS_LATER_READING);
         assertThat(Odometer.check(existing, T.plusDays(11), b("20000"), max).problem()).isEqualTo(Odometer.Problem.IMPLAUSIBLE_JUMP);
+        // same-day readings (CNG + petrol fill on one statement date, no times) cannot be ordered: not a decrease
+        assertThat(Odometer.check(existing, T.plusDays(10), b("10950"), max).ok()).isTrue();
     }
 
     @Test

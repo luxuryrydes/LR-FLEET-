@@ -23,18 +23,39 @@ public enum EnergyType {
         return efficiencyUnit;
     }
 
-    /** Accepts common spreadsheet spellings: "Petrol", "MS", "HSD", "CNG", "EV", "Electric". Returns null if unknown. */
+    /**
+     * Accepts spreadsheet and fuel-company spellings: "Petrol", "MS", "HSD", "CNG", "EV", and statement names such as
+     * "AUTO CNG - BPCL", "PETROL - BPCL", "XtraPremium", "Hi Speed Diesel". Returns null if unknown
+     * (spec/energy-cases.json).
+     */
     public static EnergyType parse(String raw) {
         if (raw == null) {
             return null;
         }
         String s = raw.trim().toUpperCase().replaceAll("[^A-Z]", "");
-        return switch (s) {
+        EnergyType exact = switch (s) {
             case "PETROL", "MS", "GASOLINE", "PET" -> PETROL;
             case "DIESEL", "HSD", "DSL" -> DIESEL;
             case "CNG", "GAS" -> CNG;
-            case "ELECTRICITY", "ELECTRIC", "EV", "KWH", "POWER", "CHARGING" -> ELECTRICITY;
+            case "ELECTRICITY", "ELECTRIC", "EV", "KWH", "CHARGING" -> ELECTRICITY;
             default -> null;
         };
+        if (exact != null) {
+            return exact;
+        }
+        // Brand / statement names: check the most specific words first.
+        if (s.contains("CNG")) {
+            return CNG;
+        }
+        if (s.contains("DIESEL") || s.contains("HSD") || s.contains("XTRAMILE") || s.contains("TURBOJET")) {
+            return DIESEL;
+        }
+        if (s.contains("PETROL") || s.contains("XTRAPREMIUM") || s.startsWith("SPEED") || s.contains("GASOLINE")) {
+            return PETROL;
+        }
+        if (s.contains("ELECTRIC") || s.contains("CHARGING") || s.contains("KWH") || s.startsWith("EV")) {
+            return ELECTRICITY;
+        }
+        return null;
     }
 }

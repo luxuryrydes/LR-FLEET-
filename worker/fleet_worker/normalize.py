@@ -33,14 +33,26 @@ _ENERGY = {
     "DIESEL": "DIESEL", "HSD": "DIESEL", "DSL": "DIESEL",
     "CNG": "CNG", "GAS": "CNG",
     "ELECTRICITY": "ELECTRICITY", "ELECTRIC": "ELECTRICITY", "EV": "ELECTRICITY", "KWH": "ELECTRICITY",
-    "POWER": "ELECTRICITY", "CHARGING": "ELECTRICITY",
+    "CHARGING": "ELECTRICITY",
 }
 
 
 def parse_energy(raw: object) -> str | None:
+    """Mirrors EnergyType.parse (spec/energy-cases.json): exact spellings, then statement names like 'AUTO CNG - BPCL'."""
     if raw is None:
         return None
-    return _ENERGY.get(re.sub(r"[^A-Z]", "", str(raw).upper()))
+    s = re.sub(r"[^A-Z]", "", str(raw).upper())
+    if s in _ENERGY:
+        return _ENERGY[s]
+    if "CNG" in s:
+        return "CNG"
+    if "DIESEL" in s or "HSD" in s or "XTRAMILE" in s or "TURBOJET" in s:
+        return "DIESEL"
+    if "PETROL" in s or "XTRAPREMIUM" in s or s.startswith("SPEED") or "GASOLINE" in s:
+        return "PETROL"
+    if "ELECTRIC" in s or "CHARGING" in s or "KWH" in s or s.startswith("EV"):
+        return "ELECTRICITY"
+    return None
 
 
 _NUM_CLEAN = re.compile(r"[,\s₹]|rs\.?|inr|kms?|ltrs?|litres?|liters?|kgs?|kwh", re.IGNORECASE)

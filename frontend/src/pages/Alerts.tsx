@@ -8,7 +8,8 @@ import { DataTable } from "../components/DataTable";
 import { Badge, ErrorBox, Notice, PageHeader, Select } from "../components/ui";
 
 const TYPES = ["GPS_NO_FUEL", "FUEL_NO_KM", "HIGH_COST_PER_KM", "FALLING_MILEAGE", "REPEATED_INVOICE", "DUPLICATE_GPS", "INVALID_ODOMETER",
-  "NO_GPS_REPORT", "SERVICE_DUE", "SERVICE_OVERDUE", "MISSING_SERVICE_BASELINE", "HIGH_MAINTENANCE_COST", "FUEL_QTY_OUT_OF_RANGE", "DOCUMENT_EXPIRY"];
+  "NO_GPS_REPORT", "SERVICE_DUE", "SERVICE_OVERDUE", "MISSING_SERVICE_BASELINE", "HIGH_MAINTENANCE_COST", "FUEL_QTY_OUT_OF_RANGE", "DOCUMENT_EXPIRY",
+  "POSSIBLE_DOUBLE_CHARGE"];
 
 export function AlertsPage() {
   const [params, setParams] = useSearchParams();
