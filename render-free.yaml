@@ -1,0 +1,47 @@
+# LR Fleet Manager - $0 TEST / DEMO deployment (API only)
+# This intentionally excludes the Python background worker because Render does
+# not offer free Background Worker instances. Spreadsheet/GPS/fuel import jobs
+# will be queued but will NOT be processed until a worker is hosted separately.
+# Use only for testing; do not rely on a free instance for production operations.
+services:
+  - type: web
+    name: lr-fleet-api-free
+    runtime: docker
+    region: singapore
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /actuator/health
+    autoDeploy: true
+    envVars:
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_POOL_SIZE
+        value: "4"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: STORAGE_TYPE
+        value: s3
+      - key: S3_BUCKET
+        value: fleet-files
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        value: ap-south-1
+      - key: S3_ACCESS_KEY
+        sync: false
+      - key: S3_SECRET_KEY
+        sync: false
+      # Lower Java heap ceiling for Render Free (512 MB RAM).
+      - key: JAVA_OPTS
+        value: "-XX:MaxRAMPercentage=60 -XX:InitialRAMPercentage=10 -Duser.timezone=Asia/Kolkata"
