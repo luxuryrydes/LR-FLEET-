@@ -71,7 +71,7 @@ const TONE: Record<string, string> = {
   DUPLICATE: "grey", INACTIVE: "grey", SOLD: "grey", SCRAPPED: "grey", LOW: "grey", CANCELLED: "grey", DISMISSED: "grey", EXCLUDED: "grey",
   OVERDUE: "red", REJECTED: "red", FAILED: "red", HIGH: "red", CRITICAL: "red", OPEN: "red", EXPIRED: "red",
   MISSING_SERVICE_RECORD: "purple", MISSING_BASELINE: "purple", UNRELIABLE_BASELINE: "purple", INSUFFICIENT_DATA: "purple",
-  MIXED_FUEL: "purple", NO_KM: "purple", NO_FUEL: "purple",
+  MIXED_FUEL: "purple", NO_KM: "purple", NO_FUEL: "purple", IMPLAUSIBLE: "red",
 };
 
 export function Badge({ value, text }: { value: string | null | undefined; text?: string }) {

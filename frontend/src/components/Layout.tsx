@@ -4,6 +4,7 @@ import { can, useAuth, type Permission } from "../lib/auth";
 
 const NAV: { to: string; label: string; icon: string; perm?: Permission; section?: string }[] = [
   { to: "/", label: "Dashboard", icon: "◧", section: "Overview" },
+  { to: "/monthly-mileage", label: "Monthly mileage", icon: "₹" },
   { to: "/alerts", label: "Alerts", icon: "⚑" },
   { to: "/vehicles", label: "Vehicles", icon: "▣", section: "Fleet" },
   { to: "/gps", label: "GPS kilometres", icon: "⌖" },

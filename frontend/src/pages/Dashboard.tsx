@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api, type Row } from "../lib/api";
 import { filtersToQuery, filtersToSearch } from "../lib/filters";
@@ -63,7 +63,8 @@ export function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Fleet dashboard" subtitle={k ? `${date(k.period.from)} to ${date(k.period.to)} · figures from validated records only` : undefined} />
+      <PageHeader title="Fleet dashboard" subtitle={k ? `${date(k.period.from)} to ${date(k.period.to)} · figures from validated records only` : undefined}
+                  actions={<Link className="btn" to="/monthly-mileage">Monthly mileage calculator →</Link>} />
       <FilterBar value={filters} onApply={setFilters} />
       <ErrorBox error={kpis.error} />
       {kpis.isLoading && <Spinner />}

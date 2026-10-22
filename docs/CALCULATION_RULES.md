@@ -209,3 +209,26 @@ Both are tested against [`spec/master-cases.json`](../spec/master-cases.json).
 * **Sold / disposed** (vehicle page → *Mark as sold / disposed*): type (sold, scrapped, returned to vendor, transferred, other),
   date, dealer/buyer (required for a sale), amount and remarks. The vehicle becomes SOLD, SCRAPPED or INACTIVE, its GPS km
   stop being imported, and later master imports never revive it. A manager can undo a disposal recorded by mistake.
+
+## 14. Monthly mileage calculator
+
+Implemented in `MonthlyMileage.java`; page **Monthly mileage** (`/monthly-mileage`), API `GET /api/monthly-mileage?month=YYYY-MM`.
+These are purchase-basis figures for one calendar month, per vehicle:
+
+```
+fuel Rs/km       = fuel expense in the month ÷ GPS km in the month
+monthly mileage  = GPS km in the month ÷ fuel quantity bought in the month   (km/kg, km/L, km/kWh)
+variance %       = (monthly mileage − expected) ÷ expected × 100
+```
+
+| Status | Meaning |
+|---|---|
+| OK | km and one fuel: Rs/km and mileage shown |
+| MIXED_FUEL | bi-fuel vehicle bought CNG *and* petrol: Rs/km only (km cannot be split between fuels) |
+| IMPLAUSIBLE | mileage outside `mileage.min/max.<FUEL>` (e.g. > 45 km/kg CNG), usually missing fuel bills or GPS days. Shown for checking, excluded from fleet mileage |
+| NO_KM | fuel bought but no GPS km (e.g. vendor vehicles, missing GPS file) |
+| NO_FUEL | GPS km but no fuel recorded |
+
+Fleet totals are weighted: **fleet Rs/km = Σ expense ÷ Σ km** over vehicles with both, and **fleet km/kg = Σ km ÷ Σ kg** over OK
+single-fuel vehicles. They are never an average of vehicle figures. Example: 4,200 km for 180 kg CNG costing Rs 15,800.40 gives
+Rs 3.76/km and 23.33 km/kg. The page also shows the engine's refuelling-interval mileage for comparison, plus a 12-month trend.

@@ -173,6 +173,42 @@ class CalculationFlowIT extends AbstractIT {
     }
 
     @Test
+    void monthlyMileageCalculatorDividesMonthFuelExpenseByMonthKm() throws Exception {
+        java.time.YearMonth month = java.time.YearMonth.now().minusMonths(14);
+        base = month.atDay(1);
+        long cng = createVehicle("DL1MM0001", "CNG", "24");
+        long bi = createVehicle("DL1MM0002", "CNG_PETROL");
+        for (int d = 0; d < 10; d++) {
+            km(cng, d, "420");       // 4,200 km
+            km(bi, d, "300");        // 3,000 km
+        }
+        call(post("/api/fuel"), adminToken, fuel(cng, 3, "CNG", "100", "8800.20", null), status().isOk());
+        call(post("/api/fuel"), adminToken, fuel(cng, 8, "CNG", "80", "7000.20", null), status().isOk());
+        call(post("/api/fuel"), adminToken, fuel(bi, 4, "CNG", "120", "10500", null), status().isOk());
+        call(post("/api/fuel"), adminToken, fuel(bi, 6, "PETROL", "10", "2500", null), status().isOk());
+        String q = "?month=" + month + "&vehicle=DL1MM";
+        JsonNode m = getJson("/api/monthly-mileage" + q, adminToken);
+        JsonNode a = m.get("rows").get(0);
+        assertThat(a.get("registrationNumber").asText()).isEqualTo("DL1MM0001");
+        assertThat(a.get("costPerKm").decimalValue()).isEqualByComparingTo("3.76");        // 15,800.40 / 4,200
+        assertThat(a.get("mileage").decimalValue()).isEqualByComparingTo("23.333");        // 4,200 / 180 kg
+        assertThat(a.get("variancePct").decimalValue()).isEqualByComparingTo("-2.78");     // vs expected 24
+        JsonNode b = m.get("rows").get(1);
+        assertThat(b.get("status").asText()).isEqualTo("MIXED_FUEL");
+        assertThat(b.get("costPerKm").decimalValue()).isEqualByComparingTo("4.33");        // 13,000 / 3,000
+        assertThat(b.get("mileage").isNull()).isTrue();
+        JsonNode t = m.get("totals");
+        assertThat(t.get("costPerKm").decimalValue()).isEqualByComparingTo("4.00");        // 28,800.40 / 7,200 = 4.0001
+        assertThat(t.get("mileageByEnergy").get("CNG").get("mileage").decimalValue()).isEqualByComparingTo("23.333");
+        JsonNode trend = getJson("/api/monthly-mileage/trend" + q + "&months=3", adminToken);
+        assertThat(trend).hasSize(3);
+        assertThat(trend.get(2).get("costPerKm").decimalValue()).isEqualByComparingTo("4.00");
+        assertThat(trend.get(0).get("vehicles").asInt()).isZero();
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/monthly-mileage/export" + q)
+                .header("Authorization", "Bearer " + adminToken)).andExpect(status().isOk());
+    }
+
+    @Test
     void incompatibleFuelRejected() throws Exception {
         long v = createVehicle("KL07CC0002", "ELECTRIC");
         JsonNode err = call(post("/api/fuel"), adminToken, fuel(v, 0, "PETROL", "20", "2000", null), status().isBadRequest());

@@ -4,6 +4,7 @@ import { Spinner } from "./components/ui";
 import { can, useAuth, type Permission } from "./lib/auth";
 import { LoginPage } from "./pages/Login";
 import { DashboardPage } from "./pages/Dashboard";
+import { MonthlyMileagePage } from "./pages/MonthlyMileage";
 import { VehiclesPage } from "./pages/Vehicles";
 import { VehicleFormPage } from "./pages/VehicleForm";
 import { VehicleDetailPage } from "./pages/VehicleDetail";
@@ -42,6 +43,7 @@ export function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<DashboardPage />} />
+        <Route path="monthly-mileage" element={<MonthlyMileagePage />} />
         <Route path="vehicles" element={<VehiclesPage />} />
         <Route path="vehicles/new" element={<Guard perm="write" element={<VehicleFormPage />} />} />
         <Route path="vehicles/:id" element={<VehicleDetailPage />} />
