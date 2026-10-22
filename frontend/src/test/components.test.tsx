@@ -180,19 +180,20 @@ describe("Vehicle master preview and disposal", () => {
 });
 
 describe("Monthly mileage calculator", () => {
-  it("shows month fuel expense ÷ month km per vehicle and filters mixed-fuel vehicles", async () => {
+  it("shows month fuel expense ÷ month km per vehicle and mixed fuel as km/kgL", async () => {
     const { api } = await import("../lib/api");
     const { MonthlyMileagePage } = await import("../pages/MonthlyMileage");
     const month = {
       month: "2026-10", totals: {
         vehicles: 2, vehiclesIncluded: 2, statusCounts: { OK: 1, MIXED_FUEL: 1 }, totalKm: 7200, totalFuelExpense: 28800.4,
         includedKm: 7200, includedFuelExpense: 28800.4, costPerKm: 4.0, mileageByEnergy: { CNG: { km: 4200, quantity: 180, mileage: 23.333, unit: "km/kg" } },
+        mixedFuel: { km: 3000, quantity: 130, mileage: 23.077, unit: "km/kgL", vehicles: 1 },
       },
       rows: [
         { vehicleId: 1, registrationNumber: "DL1MM0001", vehicle: "Maruti Dzire", fuelType: "CNG", operatorType: "OWN_DRIVER", km: 4200, cngKg: 180,
           fuelExpense: 15800.4, costPerKm: 3.76, mileage: 23.333, mileageUnit: "km/kg", expectedMileage: 24, variancePct: -2.78, belowExpected: false, status: "OK" },
         { vehicleId: 2, registrationNumber: "DL1MM0002", vehicle: "Maruti Ciaz", fuelType: "CNG_PETROL", operatorType: "OWN_DRIVER", km: 3000, cngKg: 120,
-          petrolL: 10, fuelExpense: 13000, costPerKm: 4.33, mileage: null, expectedMileage: null, variancePct: null, belowExpected: false, status: "MIXED_FUEL" },
+          petrolL: 10, combinedQuantity: 130, fuelExpense: 13000, costPerKm: 4.33, mileage: 23.077, mileageUnit: "km/kgL", expectedMileage: null, variancePct: null, belowExpected: false, status: "MIXED_FUEL" },
       ],
     };
     const spy = vi.spyOn(api, "get").mockImplementation(async (path: string) => (path.endsWith("/trend") ? [] : month) as never);
@@ -202,7 +203,9 @@ describe("Monthly mileage calculator", () => {
     const table = screen.getByRole("table", { name: "Monthly mileage by vehicle" });
     expect(within(table).getByText("₹3.76")).toBeInTheDocument();
     expect(within(table).getByText("180 kg CNG + 10 L petrol".replace("180", "120"))).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("tab", { name: /Mixed fuel/ }));
+    expect(screen.getAllByText("23.08 km/kgL")).toHaveLength(2);                 // mixed-fuel card + vehicle row: 3000 ÷ (120 kg + 10 L)
+    expect(within(table).getByText("= 130 kgL")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: /Mixed fuel \(km\/kgL\)/ }));
     expect(within(table).queryByText("DL1MM0001")).not.toBeInTheDocument();
     expect(within(table).getByText("DL1MM0002")).toBeInTheDocument();
     spy.mockRestore();

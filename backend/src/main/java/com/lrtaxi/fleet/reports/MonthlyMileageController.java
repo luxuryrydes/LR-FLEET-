@@ -27,6 +27,7 @@ public class MonthlyMileageController {
             col("Vehicle", "registrationNumber"), col("Make / model", "vehicle"), col("Fuel type", "fuelType"),
             col("Driver type", "operatorType"), col("Department", "departmentName"), num("GPS km", "km"), integer("GPS days", "gpsDays"),
             num("CNG (kg)", "cngKg"), num("Petrol (L)", "petrolL"), num("Diesel (L)", "dieselL"), num("Electricity (kWh)", "electricityKwh"),
+            num("Combined kg + L (mixed fuel)", "combinedQuantity"),
             money("Fuel expense", "fuelExpense"), num("Fuel ₹/km", "costPerKm"), num("Monthly mileage", "mileage"),
             col("Unit", "mileageUnit"), num("Expected", "expectedMileage"), num("Variance %", "variancePct"),
             num("Refuelling-interval mileage", "intervalMileage"), col("Status", "status"));
@@ -60,7 +61,8 @@ public class MonthlyMileageController {
         return Exporter.respond("monthly_mileage_" + m, format, COLUMNS, rows, List.of(
                 "Monthly mileage calculator - " + m,
                 "Fuel ₹/km = fuel expense in the month ÷ GPS km in the month (purchase basis).",
-                "Monthly mileage = GPS km ÷ fuel bought in the month; only when one fuel was bought (MIXED_FUEL otherwise).",
+                "Monthly mileage = GPS km ÷ fuel bought in the month (km/kg, km/L, km/kWh).",
+                "Mixed fuel (CNG + petrol): kg and litres are added into one quantity (kgL) and km ÷ kgL is shown as km/kgL. It compares mixed-fuel vehicles only; 1 kg CNG and 1 L petrol are not the same energy.",
                 "NO_KM: fuel bought but no GPS km imported (e.g. vendor vehicles). NO_FUEL: km but no fuel recorded.",
                 "Refuelling-interval mileage is the engine's odometer/GPS figure between fills, shown for comparison."));
     }

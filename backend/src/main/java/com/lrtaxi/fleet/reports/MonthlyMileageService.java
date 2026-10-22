@@ -112,7 +112,9 @@ public class MonthlyMileageService {
             m.put("costPerKm", res.costPerKm());
             m.put("mileage", res.mileage());
             m.put("mileageEnergy", res.mileageEnergy() == null ? null : res.mileageEnergy().name());
-            m.put("mileageUnit", res.mileageEnergy() == null ? null : res.mileageEnergy().efficiencyUnit());
+            m.put("mileageUnit", res.unit());
+            // Mixed fuel: kg + L added into one quantity (kgL) as LR Taxi requested; single fuel: that fuel's quantity.
+            m.put("combinedQuantity", res.status() == MonthlyMileage.Status.MIXED_FUEL ? res.quantity() : null);
             m.put("status", res.status().name());
 
             BigDecimal expected = null;
@@ -189,6 +191,13 @@ public class MonthlyMileageService {
             mileage.put(e.getKey().name(), x);
         }
         m.put("mileageByEnergy", mileage);
+        Map<String, Object> mixed = new LinkedHashMap<>();
+        mixed.put("km", t.mixedKm());
+        mixed.put("quantity", t.mixedQuantity());
+        mixed.put("mileage", t.mixedMileage());
+        mixed.put("unit", "km/kgL");
+        mixed.put("vehicles", t.mixedVehicles());
+        m.put("mixedFuel", mixed);
         return m;
     }
 

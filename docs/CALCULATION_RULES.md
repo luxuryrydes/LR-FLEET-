@@ -218,13 +218,14 @@ These are purchase-basis figures for one calendar month, per vehicle:
 ```
 fuel Rs/km       = fuel expense in the month ÷ GPS km in the month
 monthly mileage  = GPS km in the month ÷ fuel quantity bought in the month   (km/kg, km/L, km/kWh)
+mixed fuel       = GPS km in the month ÷ (kg CNG + L petrol bought)          (km/kgL)
 variance %       = (monthly mileage − expected) ÷ expected × 100
 ```
 
 | Status | Meaning |
 |---|---|
 | OK | km and one fuel: Rs/km and mileage shown |
-| MIXED_FUEL | bi-fuel vehicle bought CNG *and* petrol: Rs/km only (km cannot be split between fuels) |
+| MIXED_FUEL | bi-fuel vehicle bought CNG *and* petrol: Rs/km, and km ÷ (kg + L) in the combined unit **km/kgL** |
 | IMPLAUSIBLE | mileage outside `mileage.min/max.<FUEL>` (e.g. > 45 km/kg CNG), usually missing fuel bills or GPS days. Shown for checking, excluded from fleet mileage |
 | NO_KM | fuel bought but no GPS km (e.g. vendor vehicles, missing GPS file) |
 | NO_FUEL | GPS km but no fuel recorded |
@@ -232,3 +233,10 @@ variance %       = (monthly mileage − expected) ÷ expected × 100
 Fleet totals are weighted: **fleet Rs/km = Σ expense ÷ Σ km** over vehicles with both, and **fleet km/kg = Σ km ÷ Σ kg** over OK
 single-fuel vehicles. They are never an average of vehicle figures. Example: 4,200 km for 180 kg CNG costing Rs 15,800.40 gives
 Rs 3.76/km and 23.33 km/kg. The page also shows the engine's refuelling-interval mileage for comparison, plus a 12-month trend.
+
+**Mixed fuel (kgL).** At LR Taxi's request, a vehicle that bought more than one fuel in the month has its quantities added into one
+figure, written *kgL* (kg + L), and its mileage is km ÷ kgL. Example: 246 km with 27.66 kg CNG and 23.64 L petrol is 51.30 kgL, so
+4.80 km/kgL. One kg of CNG and one litre of petrol are not the same amount of energy, so km/kgL is only for comparing mixed-fuel
+vehicles with each other and the same vehicle month to month. It has no expected value or variance, and it is never added into the
+fleet km/kg or km/L. The fleet figure is weighted the same way: Σ km ÷ Σ kgL over mixed-fuel vehicles (`totals.mixedFuel`).
+Other combinations name their units in order, e.g. petrol + electricity is km/LkWh.

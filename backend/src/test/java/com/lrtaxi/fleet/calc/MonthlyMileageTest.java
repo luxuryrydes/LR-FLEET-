@@ -34,11 +34,16 @@ class MonthlyMileageTest {
     }
 
     @Test
-    void mixedFuelMonthGivesCostPerKmButNoKmPerKg() {
-        var r = MonthlyMileage.evaluate(vm("3000", "13000", EnergyType.CNG, "120", EnergyType.PETROL, "10"));
+    void mixedFuelMonthAddsKgAndLitresIntoKgL() {
+        // HR38AG0004 example: 246 km, 27.66 kg CNG + 23.64 L petrol = 51.30 kgL -> 4.795 km/kgL
+        var r = MonthlyMileage.evaluate(vm("246", "5333.85", EnergyType.CNG, "27.66", EnergyType.PETROL, "23.64"));
         assertThat(r.status()).isEqualTo(MonthlyMileage.Status.MIXED_FUEL);
-        assertThat(r.costPerKm()).isEqualByComparingTo("4.33");
-        assertThat(r.mileage()).isNull();
+        assertThat(r.costPerKm()).isEqualByComparingTo("21.68");
+        assertThat(r.quantity()).isEqualByComparingTo("51.30");
+        assertThat(r.mileage()).isEqualByComparingTo("4.795");
+        assertThat(r.unit()).isEqualTo("km/kgL");
+        assertThat(r.mileageEnergy()).isNull();
+        assertThat(MonthlyMileage.evaluate(vm("3000", "13000", EnergyType.PETROL, "10", EnergyType.ELECTRICITY, "50")).unit()).isEqualTo("km/LkWh");
     }
 
     @Test
@@ -67,7 +72,7 @@ class MonthlyMileageTest {
         var t = MonthlyMileage.totals(List.of(
                 vm("4000", "12000", EnergyType.CNG, "160"),                         // 25 km/kg, Rs 3/km
                 vm("1000", "6000", EnergyType.CNG, "80"),                          // 12.5 km/kg, Rs 6/km
-                vm("2000", "9000", EnergyType.CNG, "70", EnergyType.PETROL, "15"), // mixed: Rs/km only
+                vm("2000", "9000", EnergyType.CNG, "70", EnergyType.PETROL, "15"), // mixed: 2000 / 85 kgL
                 vm(null, "7000", EnergyType.DIESEL, "75"),                         // vendor vehicle, no km
                 vm("900", null)));                                                 // no fuel
         assertThat(t.vehiclesIncluded()).isEqualTo(3);
@@ -77,5 +82,9 @@ class MonthlyMileageTest {
         // weighted 5000 km / 240 kg = 20.833, not the simple average (25 + 12.5) / 2 = 18.75
         assertThat(t.mileage().get(EnergyType.CNG)).isEqualByComparingTo("20.833");
         assertThat(t.mileage()).doesNotContainKey(EnergyType.PETROL);
+        // mixed-fuel vehicles kept separate: 2000 km / (70 kg + 15 L) = 23.529 km/kgL
+        assertThat(t.mixedVehicles()).isEqualTo(1);
+        assertThat(t.mixedQuantity()).isEqualByComparingTo("85");
+        assertThat(t.mixedMileage()).isEqualByComparingTo("23.529");
     }
 }

@@ -83,8 +83,8 @@ Status codes: 400 validation, 401 not signed in, 403 role, 404 not found, 409 co
 | Method | Path | Role | Notes |
 |---|---|---|---|
 | GET | /api/dashboard/kpis, /api/dashboard/charts | READ | Filters |
-| GET | /api/monthly-mileage?month=YYYY-MM | READ | Monthly mileage calculator: per-vehicle Rs/km and km/kg + fleet totals (filters apply) |
-| GET | /api/monthly-mileage/trend?month=YYYY-MM&months=12 | READ | Fleet Rs/km, km and km/kg per month |
+| GET | /api/monthly-mileage?month=YYYY-MM | READ | Monthly mileage calculator: per-vehicle Rs/km and km/kg + fleet totals (filters apply). Mixed-fuel rows have `combinedQuantity` (kg + L) and `mileageUnit` `km/kgL`; `totals.mixedFuel` = `{km, quantity, mileage, unit, vehicles}` |
+| GET | /api/monthly-mileage/trend?month=YYYY-MM&months=12 | READ | Fleet Rs/km, km, km/kg and mixed km/kgL per month |
 | GET | /api/monthly-mileage/export?month=YYYY-MM&format=xlsx\|csv | READ | Same rows as Excel/CSV |
 | GET | /api/reports | READ | Catalog of the 16 reports |
 | GET | /api/reports/{key} | READ | Preview: columns, notes, first 500 rows, total |

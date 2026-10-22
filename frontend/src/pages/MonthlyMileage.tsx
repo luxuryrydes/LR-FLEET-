@@ -107,21 +107,30 @@ export function MonthlyMileagePage() {
             {mileageCard("PETROL", "km/L")}
             {mileageCard("DIESEL", "km/L")}
             {mileageCard("ELECTRICITY", "km/kWh")}
+            <div className="kpi">
+              <div className="kpi-label">Mixed fuel mileage</div>
+              <div className="kpi-value">{t.mixedFuel?.mileage ? `${number(t.mixedFuel.mileage, 2)} km/kgL` : "—"}</div>
+              <div className="kpi-sub">{t.mixedFuel?.vehicles
+                ? `${number(t.mixedFuel.km, 0)} km ÷ ${number(t.mixedFuel.quantity, 1)} kgL · ${t.mixedFuel.vehicles} CNG + petrol vehicles`
+                : "No mixed-fuel vehicles"}</div>
+            </div>
           </div>
           <Card title="Last 12 months">
             <div className="chart-box">
               <ResponsiveContainer>
                 <ComposedChart data={(trend.data ?? []).map((r) => ({ month: monthLabel(r.month), km: Number(r.totalKm), cpk: r.costPerKm === null ? null : Number(r.costPerKm),
-                  cng: r.mileageByEnergy?.CNG?.mileage ? Number(r.mileageByEnergy.CNG.mileage) : null }))}>
+                  cng: r.mileageByEnergy?.CNG?.mileage ? Number(r.mileageByEnergy.CNG.mileage) : null,
+                  mixed: r.mixedFuel?.mileage ? Number(r.mixedFuel.mileage) : null }))}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="month" fontSize={12} />
                   <YAxis yAxisId="km" fontSize={12} tickFormatter={(v) => number(v, 0)} />
                   <YAxis yAxisId="r" orientation="right" fontSize={12} tickFormatter={(v) => `₹${v}`} />
-                  <Tooltip formatter={(v: number, n: string) => (n === "GPS km" ? `${number(v, 0)} km` : n === "₹ / km" ? rupees(v) : `${number(v, 2)} km/kg`)} />
+                  <Tooltip formatter={(v: number, n: string) => (n === "GPS km" ? `${number(v, 0)} km` : n === "₹ / km" ? rupees(v) : `${number(v, 2)} ${n === "Mixed km/kgL" ? "km/kgL" : "km/kg"}`)} />
                   <Legend />
                   <Bar yAxisId="km" dataKey="km" name="GPS km" fill="#9fb8d6" />
                   <Line yAxisId="r" dataKey="cpk" name="₹ / km" stroke="#b45309" strokeWidth={2} connectNulls />
                   <Line yAxisId="r" dataKey="cng" name="CNG km/kg" stroke="#059669" strokeWidth={2} connectNulls />
+                  <Line yAxisId="r" dataKey="mixed" name="Mixed km/kgL" stroke="#7c3aed" strokeWidth={2} strokeDasharray="5 3" connectNulls />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -129,7 +138,7 @@ export function MonthlyMileagePage() {
           <Tabs<View> value={view} onChange={setView} tabs={[
             { key: "", label: "All", count: rows.length },
             { key: "OK", label: "Calculated", count: count("OK") },
-            { key: "MIXED_FUEL", label: "Mixed fuel (₹/km only)", count: count("MIXED_FUEL") },
+            { key: "MIXED_FUEL", label: "Mixed fuel (km/kgL)", count: count("MIXED_FUEL") },
             { key: "BELOW", label: "Below expected", count: below },
             { key: "IMPLAUSIBLE", label: "Implausible (check fuel)", count: count("IMPLAUSIBLE") },
             { key: "NO_KM", label: "Fuel but no km", count: count("NO_KM") },
@@ -161,6 +170,8 @@ export function MonthlyMileagePage() {
                       <td className="num" style={{ textAlign: "right" }}>
                         {[r.cngKg && `${number(r.cngKg, 2)} kg CNG`, r.petrolL && `${number(r.petrolL, 2)} L petrol`, r.dieselL && `${number(r.dieselL, 2)} L diesel`,
                           r.electricityKwh && `${number(r.electricityKwh, 1)} kWh`].filter(Boolean).join(" + ") || "—"}
+                        {r.combinedQuantity !== null && r.combinedQuantity !== undefined && (
+                          <div className="muted small">= {number(r.combinedQuantity, 2)} {String(r.mileageUnit ?? "km/kgL").slice(3)}</div>)}
                       </td>
                       <td className="num" style={{ textAlign: "right" }}>{rupees(r.fuelExpense)}</td>
                       <td className="num" style={{ textAlign: "right" }}><strong>{r.costPerKm === null ? "—" : rupees(r.costPerKm)}</strong></td>
@@ -180,7 +191,8 @@ export function MonthlyMileagePage() {
           </div>
           <p className="muted small">
             ₹/km and mileage use the fuel bought and the GPS km recorded in the calendar month (purchase basis). A bi-fuel vehicle that bought both CNG
-            and petrol shows ₹/km only, because its km cannot be split between the fuels. "Fuel but no km" usually means a vendor vehicle (GPS km are
+            and petrol adds kg and litres into one quantity (kgL) and shows km ÷ kgL as km/kgL, e.g. 246 km ÷ (27.66 kg + 23.64 L = 51.30 kgL)
+            = 4.80 km/kgL. km/kgL compares mixed-fuel vehicles with each other only; it is kept out of the fleet km/kg and km/L and has no expected value. "Fuel but no km" usually means a vendor vehicle (GPS km are
             imported only for LR drivers) or a missing GPS file. "Implausible" means the month's km ÷ fuel is outside the plausible range in Settings
             (e.g. above 45 km/kg for CNG), usually because fuel bills or GPS days are missing; those vehicles are left out of the fleet mileage.
             Fleet mileage is weighted: total km ÷ total fuel, not an average of vehicles.

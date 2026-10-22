@@ -196,10 +196,13 @@ class CalculationFlowIT extends AbstractIT {
         JsonNode b = m.get("rows").get(1);
         assertThat(b.get("status").asText()).isEqualTo("MIXED_FUEL");
         assertThat(b.get("costPerKm").decimalValue()).isEqualByComparingTo("4.33");        // 13,000 / 3,000
-        assertThat(b.get("mileage").isNull()).isTrue();
+        assertThat(b.get("mileage").decimalValue()).isEqualByComparingTo("23.077");      // 3,000 km / (120 kg + 10 L)
+        assertThat(b.get("mileageUnit").asText()).isEqualTo("km/kgL");
+        assertThat(b.get("combinedQuantity").decimalValue()).isEqualByComparingTo("130");
         JsonNode t = m.get("totals");
         assertThat(t.get("costPerKm").decimalValue()).isEqualByComparingTo("4.00");        // 28,800.40 / 7,200 = 4.0001
         assertThat(t.get("mileageByEnergy").get("CNG").get("mileage").decimalValue()).isEqualByComparingTo("23.333");
+        assertThat(t.get("mixedFuel").get("mileage").decimalValue()).isEqualByComparingTo("23.077");
         JsonNode trend = getJson("/api/monthly-mileage/trend" + q + "&months=3", adminToken);
         assertThat(trend).hasSize(3);
         assertThat(trend.get(2).get("costPerKm").decimalValue()).isEqualByComparingTo("4.00");
