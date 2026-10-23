@@ -211,3 +211,56 @@ describe("Monthly mileage calculator", () => {
     spy.mockRestore();
   }, 30000);
 });
+
+describe("Vehicle documents dashboard", () => {
+  const cell = (status: string, extra: Record<string, unknown> = {}) => ({ status, required: true, daysToExpiry: null, ...extra });
+  const matrix = {
+    types: [{ code: "INSURANCE", label: "Insurance" }, { code: "PUC", label: "Pollution (PUC)" }, { code: "FITNESS", label: "Fitness" }],
+    reminderDays: 30, vehicles: 2,
+    summary: {
+      INSURANCE: { VALID: 1, DUE_SOON: 0, EXPIRED: 1, NOT_REQUIRED: 0, NO_EXPIRY: 0, MISSING: 0, OPTIONAL: 0, WITH_FILE: 1, NO_FILE: 1 },
+      PUC: { VALID: 0, DUE_SOON: 1, EXPIRED: 0, NOT_REQUIRED: 1, NO_EXPIRY: 0, MISSING: 0, OPTIONAL: 0, WITH_FILE: 0, NO_FILE: 1 },
+      FITNESS: { VALID: 0, DUE_SOON: 0, EXPIRED: 0, NOT_REQUIRED: 0, NO_EXPIRY: 0, MISSING: 1, OPTIONAL: 1, WITH_FILE: 0, NO_FILE: 0 },
+    },
+    rows: [
+      { vehicleId: 1, registrationNumber: "DL52GD0247", model: "Tigor EV", registrationClass: "COMMERCIAL", documents: {
+        INSURANCE: cell("VALID", { id: 11, expiryDate: "2027-09-13", fileId: 5, fileName: "policy.pdf", daysToExpiry: 325 }),
+        PUC: cell("NOT_REQUIRED", { id: 12, notApplicable: true }),
+        FITNESS: cell("MISSING") } },
+      { vehicleId: 2, registrationNumber: "DL8CAR9335", model: "Ciaz", registrationClass: "PRIVATE", documents: {
+        INSURANCE: cell("EXPIRED", { id: 21, expiryDate: "2026-10-01", daysToExpiry: -22 }),
+        PUC: cell("DUE_SOON", { id: 22, expiryDate: "2026-11-05", daysToExpiry: 13 }),
+        FITNESS: cell("OPTIONAL", { required: false }) } },
+    ],
+  };
+
+  it("shows every vehicle's documents by colour, scans, and filters from a KPI card", async () => {
+    const { api } = await import("../lib/api");
+    const { DocumentMatrix } = await import("../pages/Documents");
+    const spy = vi.spyOn(api, "get").mockImplementation(async () => matrix as never);
+    wrap(
+      <authModule.AuthContext.Provider value={{ user: { id: 1, email: "u@x", fullName: "U", roles: ["OPERATOR"] }, loading: false, login: vi.fn(), logout: vi.fn() }}>
+        <DocumentMatrix />
+      </authModule.AuthContext.Provider>,
+    );
+    const table = await screen.findByRole("table", { name: "Vehicle documents" });
+    expect(within(table).getByText("DL52GD0247")).toBeInTheDocument();
+    expect(within(table).getByRole("button", { name: "DL52GD0247 Insurance: Valid" })).toHaveTextContent("13-09-2027");
+    expect(within(table).getByRole("button", { name: "DL52GD0247 Pollution (PUC): Not required" })).toHaveTextContent("N/A");
+    expect(within(table).getByRole("button", { name: "DL52GD0247 Fitness: Missing" })).toHaveTextContent("Missing");
+    expect(within(table).getByRole("button", { name: "DL8CAR9335 Insurance: Expired" })).toHaveTextContent("22 d ago");
+    expect(within(table).getByRole("button", { name: "DL8CAR9335 Pollution (PUC): Due soon" })).toHaveTextContent("13 d left");
+    expect(within(table).getByTitle("Scan: policy.pdf")).toBeInTheDocument();
+    expect(within(table).getAllByTitle("No scan uploaded")).toHaveLength(2);
+    await userEvent.click(screen.getByRole("button", { name: "Insurance: show vehicles needing attention" }));
+    expect(spy).toHaveBeenLastCalledWith("/api/documents/matrix", expect.objectContaining({ docType: "INSURANCE", state: "ATTENTION" }));
+    spy.mockRestore();
+  }, 30000);
+
+  it("says plainly when the import worker is not running instead of loading forever", async () => {
+    const { WorkerNotice } = await import("../pages/ImportWizard");
+    wrap(<WorkerNotice w={{ online: false, lastSeen: null, queuedJobs: 1, wakeConfigured: false }} />);
+    expect(screen.getByText("The import worker is not running")).toBeInTheDocument();
+    expect(screen.getByText(/render-free.yaml/)).toBeInTheDocument();
+  });
+});

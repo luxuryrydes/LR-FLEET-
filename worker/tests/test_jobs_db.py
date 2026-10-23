@@ -118,3 +118,60 @@ def test_unreadable_file_fails_batch_without_retry(env):
         j = cur.fetchone()
     assert b["status"] == "FAILED" and "Cannot open Excel file" in b["error_message"]
     assert j == {"status": "FAILED", "attempts": 1}
+
+
+def test_documents_register_reads_every_tab_and_heartbeat(env):
+    import json
+    from datetime import datetime
+    from openpyxl import Workbook
+    from fleet_worker.jobs import heartbeat, run_one
+
+    conn, storage, tmp = env
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Commercial cars"
+    ws.append(["COMMERCIAL CARS"])
+    ws.append(["S. No.", "Vehicle No", "Insurance End Date", "Pullution End Date", "Permit 1 Year End Date"])
+    ws.append([1, "DL52GD0247", datetime(2027, 9, 13), "NA", datetime(2026, 9, 28)])
+    todo = wb.create_sheet("INSURANCE")
+    todo.append(["March 2026 INSURANCE"])
+    todo.append(["S.NO", "Vehical No", "INSURANCE END DATE"])
+    todo.append([1, "DL52GD0247", datetime(2026, 3, 1)])
+    key = "import/2026/10/test-docs.xlsx"
+    dest = tmp / "files" / key
+    dest.parent.mkdir(parents=True)
+    wb.save(dest)
+    with conn.cursor() as cur:
+        cur.execute("""INSERT INTO vehicles (registration_number, registration_normalized, make, model, fuel_type, category_code, ownership_type)
+                       VALUES ('DL52GD0247', 'DL52GD0247', 'Tata', 'Tigor EV', 'ELECTRIC', 'SEDAN', 'OWNED')""")
+        cur.execute("""INSERT INTO stored_files (storage_key, original_filename, content_type, size_bytes, sha256, purpose)
+                       VALUES (%s, 'test-docs.xlsx', 'x', 1, repeat('0', 64), 'IMPORT') RETURNING id""", (key,))
+        fid = cur.fetchone()["id"]
+        cur.execute("""INSERT INTO import_batches (import_type, file_id, original_filename, file_sha256, status)
+                       VALUES ('DOCUMENTS', %s, 'test-docs.xlsx', repeat('0', 64), 'HEADERS_PENDING') RETURNING id""", (fid,))
+        bid = cur.fetchone()["id"]
+        cur.execute("INSERT INTO background_jobs (job_type, payload) VALUES ('DETECT_HEADERS', %s)", (f'{{"batchId": {bid}}}',))
+    conn.commit()
+    assert run_one(conn, storage, "test") is True
+    with conn.cursor() as cur:
+        cur.execute("SELECT sheet_info FROM import_batches WHERE id = %s", (bid,))
+        sheet = cur.fetchone()["sheet_info"]["sheets"][0]
+        mapping = sheet["suggestedMapping"]["DOCUMENTS"]
+        assert mapping["insuranceExpiry"] == "Insurance End Date"
+        cur.execute("""UPDATE import_batches SET status = 'PARSE_PENDING', selected_sheet = 'Commercial cars', header_row = %s,
+                       column_mapping = %s, options = '{"allSheets": true}' WHERE id = %s""", (sheet["headerRow"], json.dumps(mapping), bid))
+        cur.execute("INSERT INTO background_jobs (job_type, payload) VALUES ('PARSE_IMPORT', %s)", (f'{{"batchId": {bid}}}',))
+    conn.commit()
+    assert run_one(conn, storage, "test") is True
+    with conn.cursor() as cur:
+        cur.execute("SELECT status, valid_rows, duplicate_rows FROM import_batches WHERE id = %s", (bid,))
+        b = cur.fetchone()
+        assert (b["status"], b["valid_rows"], b["duplicate_rows"]) == ("PARSED", 1, 1)   # the older to-do row is not used
+        cur.execute("SELECT parsed FROM import_staging_rows WHERE batch_id = %s AND status = 'VALID'", (bid,))
+        docs = {d["docType"]: d for d in cur.fetchone()["parsed"]["documents"]}
+    assert docs["INSURANCE"]["expiryDate"] == "2027-09-13" and docs["PUC"]["notApplicable"]
+
+    heartbeat(conn, "test", "host")
+    with conn.cursor() as cur:
+        cur.execute("SELECT count(*) AS n FROM worker_heartbeats WHERE worker_id = 'test' AND last_seen > now() - interval '1 minute'")
+        assert cur.fetchone()["n"] == 1

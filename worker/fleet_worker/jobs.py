@@ -16,7 +16,8 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from .config import Config
-from .excel import FileFormatError, describe_file, read_rows
+from .documents import documents_sheets, parse_documents
+from .excel import FileFormatError, describe_file, read_rows, sheet_names
 from .parsers import ParseResult, VehicleIndex, fill_key, mark_already_recorded, parse_fuel, parse_gps, parse_master
 from .reconcile import reconcile, write_workbook
 from .storage import Storage
@@ -38,6 +39,16 @@ def connect(cfg: Config) -> psycopg.Connection:
 
 
 # ---------------------------------------------------------------------------------------------- queue
+
+def heartbeat(conn: psycopg.Connection, worker_id: str, hostname: str) -> None:
+    """Tells the API this worker is alive (the import screen warns when no worker has been seen for 90 seconds)."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO worker_heartbeats (worker_id, hostname) VALUES (%s, %s)
+            ON CONFLICT (worker_id) DO UPDATE SET last_seen = now(), hostname = EXCLUDED.hostname""", (worker_id, hostname))
+        cur.execute("DELETE FROM worker_heartbeats WHERE last_seen < now() - interval '1 day'")
+    conn.commit()
+
 
 def recover_stale(conn: psycopg.Connection, minutes: int) -> int:
     with conn.cursor() as cur:
@@ -189,12 +200,19 @@ def parse_import(conn: psycopg.Connection, storage: Storage, batch_id: int) -> d
     mapping = b["column_mapping"] or {}
     options = b["options"] or {}
     sheet = b["selected_sheet"]
-    rows = _with_file(storage, b, lambda p: read_rows(p, None if sheet == "CSV" else sheet))
     index = load_vehicle_index(conn)
     settings = load_settings(conn)
     today = date.today()
-    parser = {"GPS_KM": parse_gps, "FUEL": parse_fuel, "VEHICLE_MASTER": parse_master}[b["import_type"]]
-    result = parser(rows, b["header_row"] or 1, mapping, options, index, settings, today)
+    if b["import_type"] == "DOCUMENTS":
+        def read_all(p):
+            def one(name):
+                return read_rows(p, None if name == "CSV" else name)
+            return documents_sheets(one, sheet_names(p), sheet, b["header_row"] or 1, mapping, options.get("allSheets", True) is not False)
+        result = parse_documents(_with_file(storage, b, read_all), index, today)
+    else:
+        rows = _with_file(storage, b, lambda p: read_rows(p, None if sheet == "CSV" else sheet))
+        parser = {"GPS_KM": parse_gps, "FUEL": parse_fuel, "VEHICLE_MASTER": parse_master}[b["import_type"]]
+        result = parser(rows, b["header_row"] or 1, mapping, options, index, settings, today)
     if b["import_type"] == "FUEL":
         mark_already_recorded(result.rows, existing_fills(conn, result))
     save_staging(conn, batch_id, result)

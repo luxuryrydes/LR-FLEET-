@@ -44,6 +44,14 @@ These are local development defaults, created only when the database has no user
 **Monthly mileage calculator:** menu → *Monthly mileage*. Pick a month to see, for every vehicle, the month's fuel expense ÷
 the month's GPS km (₹/km) and km per kg/L (vehicles that bought CNG + petrol show km ÷ (kg + L) as km/kgL), against the expected mileage, plus fleet totals and a 12-month trend (Excel export).
 
+**Vehicle documents:** menu → *Vehicle documents*. The dashboard shows every vehicle against insurance, own damage, pollution,
+fitness, road tax, both permits and RC: red = expired, amber = due within 30 days, green = valid. Click a box to renew or
+upload the scan, or drag a PDF/photo onto it. Load your register with *Import documents register (Excel)*, for example
+`Permit- pollution- Insurance all details.xlsx`. All tabs are read and the latest end date per vehicle wins.
+
+**"Reading the file…" never finishes?** The import worker isn't running. The import screen now says so. Keep the
+*Import worker* window open locally, or deploy the worker on Render (see [DEPLOYMENT](docs/DEPLOYMENT.md)).
+
 **Load your fleet:** Vehicles → *Upload vehicle master sheet* → choose the master Excel (e.g. `NEW MASTER.xlsx`) → Validate → Confirm.
 Workshop vehicles become *Workshop*, vehicles without a driver become *Idle*, and only vehicles driven by your own drivers have
 their GPS km imported. Sold vehicles: open the vehicle → *Mark as sold / disposed*.

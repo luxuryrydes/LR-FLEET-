@@ -17,12 +17,13 @@ export function ImportsPage() {
       <PageHeader title="Imports" subtitle="Every upload is retained with its file, row counts, status and who committed it."
         actions={<>
           <Link className="btn" to="/imports/new?type=VEHICLE_MASTER">Import vehicle master</Link>
+          <Link className="btn" to="/imports/new?type=DOCUMENTS">Import documents register</Link>
           <Link className="btn" to="/imports/new?type=FUEL">Import fuel file</Link>
           <Link className="btn btn-primary" to="/imports/new?type=GPS_KM">Import GPS km file</Link>
         </>} />
       <div className="actions" style={{ marginBottom: 10 }}>
         <Select value={type} onChange={(v) => { setType(v); setPage(0); }} placeholder="All types" aria-label="Import type" style={{ width: 180 }}
-                options={[{ value: "GPS_KM", label: "GPS km" }, { value: "FUEL", label: "Fuel" }, { value: "VEHICLE_MASTER", label: "Vehicle master" }]} />
+                options={[{ value: "GPS_KM", label: "GPS km" }, { value: "FUEL", label: "Fuel" }, { value: "VEHICLE_MASTER", label: "Vehicle master" }, { value: "DOCUMENTS", label: "Documents register" }]} />
       </div>
       <ErrorBox error={list.error} />
       <DataTable rows={list.data?.items} loading={list.isLoading} total={list.data?.total} page={page} onPage={setPage}

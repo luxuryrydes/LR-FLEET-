@@ -1,8 +1,9 @@
-# LR Fleet Manager - $0 TEST / DEMO deployment (API only)
-# This intentionally excludes the Python background worker because Render does
-# not offer free Background Worker instances. Spreadsheet/GPS/fuel import jobs
-# will be queued but will NOT be processed until a worker is hosted separately.
-# Use only for testing; do not rely on a free instance for production operations.
+# LR Fleet Manager - $0 TEST / DEMO deployment (API + import worker, both on Render's free web plan)
+# Render has no free Background Worker type, so the Python import worker runs as a free *web service* that answers
+# a health check on WORKER_HEALTH_PORT. Free services sleep after 15 minutes without traffic: the API wakes the
+# worker by calling WORKER_WAKE_URL whenever a spreadsheet is queued (first file after a sleep waits about a minute).
+# Without the worker, uploaded Excel files stay at "Reading the file..." - the import screen now says so.
+# Use only for testing; do not rely on free instances for production operations.
 services:
   - type: web
     name: lr-fleet-api-free
@@ -42,6 +43,38 @@ services:
         sync: false
       - key: S3_SECRET_KEY
         sync: false
+      # https://lr-fleet-worker-free.onrender.com/health (the worker service below; use its real URL from Render)
+      - key: WORKER_WAKE_URL
+        sync: false
       # Lower Java heap ceiling for Render Free (512 MB RAM).
       - key: JAVA_OPTS
         value: "-XX:MaxRAMPercentage=60 -XX:InitialRAMPercentage=10 -Duser.timezone=Asia/Kolkata"
+
+  - type: web
+    name: lr-fleet-worker-free
+    runtime: docker
+    region: singapore
+    plan: free
+    dockerfilePath: ./worker/Dockerfile
+    dockerContext: ./worker
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: WORKER_DATABASE_URL
+        sync: false            # postgresql://postgres.<ref>:<password>@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require
+      - key: WORKER_HEALTH_PORT
+        value: "10000"
+      - key: PORT
+        value: "10000"
+      - key: STORAGE_TYPE
+        value: s3
+      - key: S3_BUCKET
+        value: fleet-files
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        value: ap-south-1
+      - key: S3_ACCESS_KEY
+        sync: false
+      - key: S3_SECRET_KEY
+        sync: false

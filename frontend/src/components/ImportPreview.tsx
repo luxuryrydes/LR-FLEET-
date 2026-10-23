@@ -10,9 +10,10 @@ export interface StagingMessage {
 }
 
 /** Parsed-row preview with the reason for every rejected, duplicate or warning row. */
-export function ImportPreview({ rows, importType }: { rows: Row[]; importType: "GPS_KM" | "FUEL" | "VEHICLE_MASTER" }) {
+export function ImportPreview({ rows, importType }: { rows: Row[]; importType: "GPS_KM" | "FUEL" | "VEHICLE_MASTER" | "DOCUMENTS" }) {
   if (rows.length === 0) return <div className="empty">No rows in this view.</div>;
   if (importType === "VEHICLE_MASTER") return <MasterPreview rows={rows} />;
+  if (importType === "DOCUMENTS") return <DocumentsPreview rows={rows} />;
   return (
     <div className="table-scroll">
       <table className="table" aria-label="Import preview">
@@ -55,6 +56,46 @@ export function ImportPreview({ rows, importType }: { rows: Row[]; importType: "
                     </ul>
                   )}
                 </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const DOC_LABEL: Record<string, string> = {
+  INSURANCE: "Insurance", INSURANCE_OD: "Own damage", PUC: "Pollution", FITNESS: "Fitness", ROAD_TAX: "Road tax",
+  PERMIT: "Permit 5 yr", PERMIT_1Y: "Permit 1 yr", REGISTRATION: "Registered",
+};
+
+function DocumentsPreview({ rows }: { rows: Row[] }) {
+  return (
+    <div className="table-scroll">
+      <table className="table" aria-label="Import preview">
+        <thead>
+          <tr><th>Tab / row</th><th>Status</th><th>Vehicle</th><th>Commercial / private</th><th>Dates to save</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const p = (r.parsed ?? {}) as Row;
+            const raw = (r.raw ?? {}) as Row;
+            const msgs = ((r.messages ?? []) as StagingMessage[]).filter((m) => m.code !== "DOCS_PREVIEW");
+            return (
+              <tr key={`${raw.Sheet}-${r.rowNumber}`}>
+                <td>{raw.Sheet} <span className="muted">· {r.rowNumber}</span></td>
+                <td><Badge value={r.status} /></td>
+                <td className="mono">{p.registration ?? r.registrationNumber ?? "—"}</td>
+                <td>{p.registrationClass ? label(p.registrationClass) : "—"}</td>
+                <td>
+                  {((p.documents ?? []) as Row[]).map((d) => (
+                    <span key={d.docType} className="chip">{DOC_LABEL[d.docType] ?? d.docType}: {d.notApplicable ? d.note : date(d.expiryDate ?? d.issueDate)}</span>
+                  ))}
+                </td>
+                <td>{msgs.length === 0 ? <span className="muted">—</span> : (
+                  <ul className="msg-list">{msgs.map((m, i) => <li key={i} className={`msg-${m.level}`}>{m.message}</li>)}</ul>
+                )}</td>
               </tr>
             );
           })}

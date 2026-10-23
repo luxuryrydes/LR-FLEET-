@@ -18,6 +18,7 @@ class Config:
     poll_seconds: float
     worker_id: str
     stale_minutes: int
+    health_port: int = 0
 
     @staticmethod
     def from_env() -> "Config":
@@ -36,4 +37,5 @@ class Config:
             poll_seconds=float(os.environ.get("WORKER_POLL_SECONDS", "2")),
             worker_id=os.environ.get("WORKER_ID", f"worker-{os.getpid()}"),
             stale_minutes=int(os.environ.get("WORKER_STALE_MINUTES", "15")),
+            health_port=int(os.environ.get("WORKER_HEALTH_PORT", "0") or 0),
         )

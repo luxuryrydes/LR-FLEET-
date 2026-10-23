@@ -1,13 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, download, type Page, type Row } from "../lib/api";
 import { can, useAuth } from "../lib/auth";
 import { date, dateTime, label, number } from "../lib/format";
 import { ImportPreview } from "../components/ImportPreview";
 import { Badge, Card, ErrorBox, Field, Notice, PageHeader, Spinner, Tabs } from "../components/ui";
 
-type ImportType = "GPS_KM" | "FUEL" | "VEHICLE_MASTER";
+type ImportType = "GPS_KM" | "FUEL" | "VEHICLE_MASTER" | "DOCUMENTS";
 const FIELD_LABELS: Record<string, string> = {
   vehicle: "Vehicle number / GPS device name", date: "Date", km: "Distance (km)", tripStart: "Trip start time", time: "Time",
   energyType: "Fuel type", quantity: "Quantity", unitPrice: "Rate / price per unit", grossAmount: "Value (before discount)",
@@ -18,9 +18,14 @@ const FIELD_LABELS: Record<string, string> = {
   operatorLabel: "Vendor / Driver (DRIVER, VENDOR, WORKSHOP…)", driverName: "Driver / vendor name", driverPhone: "Driver / vendor contact",
   department: "Department", registrationClass: "Private / Commercial", make: "Make", category: "Category", chassisNumber: "Chassis no.",
   engineNumber: "Engine no.", gpsDeviceName: "GPS device name", soldDate: "Sold date", soldTo: "Sold to / dealer", remarks: "Remarks",
+  insuranceExpiry: "Insurance end date", ownDamageExpiry: "Own damage insurance end date", pucExpiry: "Pollution (PUC) end date",
+  fitnessExpiry: "Fitness end date", roadTaxExpiry: "Road tax end date", permitExpiry: "Permit 5 years end date",
+  permit1yExpiry: "Permit 1 year end date", registrationDate: "Registration date",
 };
+const EXPIRY_FIELDS = ["insuranceExpiry", "ownDamageExpiry", "pucExpiry", "fitnessExpiry", "roadTaxExpiry", "permitExpiry", "permit1yExpiry", "registrationDate"];
 const REQUIRED: Record<ImportType, string[]> = {
   GPS_KM: ["vehicle", "date", "km"], FUEL: ["vehicle", "date", "energyType", "quantity"], VEHICLE_MASTER: ["registration", "model", "fuelType"],
+  DOCUMENTS: ["registration"],
 };
 const STEP_ORDER = ["Upload", "Map columns", "Preview & validate", "Confirm", "Summary"];
 
@@ -85,6 +90,7 @@ export function ImportWizardPage() {
                 <option value="GPS_KM">Daily GPS kilometres</option>
                 <option value="FUEL">Fuel / energy transactions</option>
                 <option value="VEHICLE_MASTER">Vehicle master (vehicles, drivers, vendors, departments)</option>
+                <option value="DOCUMENTS">Vehicle documents register (insurance, pollution, fitness, permit, road tax end dates)</option>
               </select>
             </Field>
             <Field label="File" required hint="Max 50 MB. The original file is kept in private storage.">
@@ -102,11 +108,34 @@ export function ImportWizardPage() {
         </Notice>
       )}
       {b && ["HEADERS_PENDING", "PARSE_PENDING", "COMMITTING"].includes(b.status) && <Spinner text={b.status === "HEADERS_PENDING" ? "Reading the file…" : b.status === "PARSE_PENDING" ? "Validating rows…" : "Saving…"} />}
+      {b && ["HEADERS_PENDING", "PARSE_PENDING"].includes(b.status) && b.worker && <WorkerNotice w={b.worker as Row} />}
       {b?.status === "FAILED" && <FailedPanel b={b} onRetry={() => batch.refetch()} />}
       {b?.status === "HEADERS_READY" && <MappingStep b={b} onDone={() => batch.refetch()} />}
       {b?.status === "PARSED" && <PreviewStep b={b} onDone={() => batch.refetch()} />}
       {b && ["COMMITTED", "CANCELLED"].includes(b.status) && <SummaryStep b={b} />}
     </>
+  );
+}
+
+/** Excel files are read by the separate import worker. Without one the file waits in the queue, so say so instead of spinning. */
+export function WorkerNotice({ w }: { w: Row }) {
+  if (w.online) {
+    return Number(w.oldestQueuedSeconds) > 120
+      ? <Notice kind="info">The import worker is busy with {w.queuedJobs} file(s) in the queue. This one will start shortly.</Notice>
+      : null;
+  }
+  return (
+    <Notice kind="warning">
+      <strong>The import worker is not running</strong>, so this file is waiting in the queue and nothing has gone wrong with it.
+      {w.wakeConfigured
+        ? " The worker is being woken up (a free server sleeps when idle and takes about a minute to start). This page continues on its own."
+        : <>
+          {" "}On your PC: keep the <em>LR Fleet - Import worker</em> window from <code>run-local.cmd</code> open (start the launcher again if you closed it).
+          {" "}On Render: the free plan in <code>render-free.yaml</code> includes the worker as <em>lr-fleet-worker-free</em>; deploy it and set
+          {" "}<code>WORKER_WAKE_URL</code> on the API (see docs/DEPLOYMENT.md).
+        </>}
+      {w.lastSeen && <> Last seen {dateTime(w.lastSeen)}.</>}
+    </Notice>
   );
 }
 
@@ -141,6 +170,8 @@ export function MappingStep({ b, onDone }: { b: Row; onDone: () => void }) {
   const [mode, setMode] = useState<"DAILY_TOTAL" | "TRIP">("DAILY_TOTAL");
   // Files such as the IGL smart-card statement have no fuel column: every row is CNG.
   const [defaultEnergy, setDefaultEnergy] = useState("");
+  // Documents register: also read the other tabs (monthly to-do lists); the latest end date wins.
+  const [allSheets, setAllSheets] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
@@ -153,13 +184,15 @@ export function MappingStep({ b, onDone }: { b: Row; onDone: () => void }) {
 
   const missing = REQUIRED[type].filter((f) => !mapping[f] && !(f === "energyType" && defaultEnergy));
   const needsAmount = type === "FUEL" && !mapping.invoiceAmount && !mapping.grossAmount && !mapping.unitPrice;
+  const needsDate = type === "DOCUMENTS" && EXPIRY_FIELDS.every((f) => !mapping[f]);
 
   const submit = async () => {
     setBusy(true);
     setError(null);
     try {
       const clean = Object.fromEntries(Object.entries(mapping).filter(([, v]) => v));
-      await api.post(`/api/imports/${b.id}/mapping`, { sheet: sheet.name, headerRow, mapping: clean, options: type === "GPS_KM" ? { recordMode: mode } : type === "FUEL" && defaultEnergy ? { defaultEnergyType: defaultEnergy } : {} });
+      await api.post(`/api/imports/${b.id}/mapping`, { sheet: sheet.name, headerRow, mapping: clean, options: type === "GPS_KM" ? { recordMode: mode } : type === "FUEL" && defaultEnergy ? { defaultEnergyType: defaultEnergy }
+        : type === "DOCUMENTS" ? { allSheets } : {} });
       onDone();
     } catch (e) {
       setError(e);
@@ -192,6 +225,11 @@ export function MappingStep({ b, onDone }: { b: Row; onDone: () => void }) {
             </select>
           </Field>
         )}
+        {type === "DOCUMENTS" && (
+          <Field label="Other worksheets" hint="Tabs such as INSURANCE or PUC to-do lists are matched automatically; for each vehicle the latest end date is used">
+            <label className="check"><input type="checkbox" checked={allSheets} onChange={(e) => setAllSheets(e.target.checked)} /> Also read every other tab with a vehicle number and end dates</label>
+          </Field>
+        )}
         {type === "GPS_KM" && (
           <Field label="What does each row represent?" required>
             <select value={mode} onChange={(e) => setMode(e.target.value as "DAILY_TOTAL" | "TRIP")} aria-label="Record mode">
@@ -213,6 +251,7 @@ export function MappingStep({ b, onDone }: { b: Row; onDone: () => void }) {
         ))}
       </div>
       {needsAmount && <Notice kind="warning">Map at least one amount column: invoice amount/cost, value or rate.</Notice>}
+      {needsDate && <Notice kind="warning">Map at least one end-date column (insurance, pollution, fitness, permit or road tax).</Notice>}
       <h3 style={{ fontSize: 14, margin: "16px 0 8px" }}>First rows in the file</h3>
       <div className="table-scroll">
         <table className="table">
@@ -226,7 +265,7 @@ export function MappingStep({ b, onDone }: { b: Row; onDone: () => void }) {
       </div>
       <div className="form-actions">
         <button className="btn" onClick={() => api.post(`/api/imports/${b.id}/cancel`).then(onDone)}>Cancel import</button>
-        <button className="btn btn-primary" disabled={missing.length > 0 || needsAmount || busy} onClick={submit}>{busy ? "Submitting…" : "Validate rows"}</button>
+        <button className="btn btn-primary" disabled={missing.length > 0 || needsAmount || needsDate || busy} onClick={submit}>{busy ? "Submitting…" : "Validate rows"}</button>
       </div>
     </Card>
   );
@@ -255,6 +294,7 @@ function PreviewStep({ b, onDone }: { b: Row; onDone: () => void }) {
       await api.post(`/api/imports/${b.id}/commit`, { policy, reason: policy === "REPLACE" ? reason : null });
       qc.invalidateQueries({ queryKey: ["gps"] });
       qc.invalidateQueries({ queryKey: ["fuel"] });
+      qc.invalidateQueries({ queryKey: ["doc-matrix"] });
       onDone();
     } catch (e) {
       setError(e);
@@ -268,9 +308,10 @@ function PreviewStep({ b, onDone }: { b: Row; onDone: () => void }) {
     { key: "" as View, label: "All", count: b.totalRows },
     { key: "VALID" as View, label: "Valid", count: b.validRows },
     { key: "WARNING" as View, label: "Warnings", count: b.warningRows },
-    { key: "DUPLICATE" as View, label: "Duplicates in file", count: b.duplicateRows },
+    { key: "DUPLICATE" as View, label: b.importType === "DOCUMENTS" ? "Older dates (not used)" : "Duplicates in file", count: b.duplicateRows },
     { key: "REJECTED" as View, label: "Rejected", count: b.rejectedRows },
     ...(b.importType === "GPS_KM" ? [{ key: "EXCLUDED" as View, label: "Not our driver (skipped)", count: b.excludedRows }] : []),
+    ...(b.importType === "DOCUMENTS" ? [{ key: "EXCLUDED" as View, label: "No dates", count: b.excludedRows }] : []),
   ], [b]);
 
   return (
@@ -324,12 +365,18 @@ function PreviewStep({ b, onDone }: { b: Row; onDone: () => void }) {
         {b.importType === "VEHICLE_MASTER" && (
           <p>{number(importable, 0)} vehicles will be checked by the server. New registrations are added. Choose below whether vehicles already in the system are updated from the sheet. Vehicles marked sold keep their sold status.</p>
         )}
+        {b.importType === "DOCUMENTS" && (
+          <p>{number(importable, 0)} vehicles will be checked by the server. A later end date than the one saved is added as a renewal (the old
+            document stays in the history); the same date is skipped. Vehicles must already be in the vehicle master.</p>
+        )}
         <div className="form-grid">
           <Field label="When a record already exists with a different value">
             <select value={policy} onChange={(e) => setPolicy(e.target.value as "SKIP" | "REPLACE")} aria-label="Duplicate policy">
-              <option value="SKIP">{b.importType === "VEHICLE_MASTER" ? "Add new vehicles only (keep existing unchanged)" : "Keep existing record (skip)"}</option>
+              <option value="SKIP">{b.importType === "VEHICLE_MASTER" ? "Add new vehicles only (keep existing unchanged)"
+                : b.importType === "DOCUMENTS" ? "Add new and later end dates only" : "Keep existing record (skip)"}</option>
               {can(user, "manage") && b.importType !== "FUEL" && (
-                <option value="REPLACE">{b.importType === "VEHICLE_MASTER" ? "Add new and update existing vehicles from the sheet" : "Replace existing record (keeps history)"}</option>
+                <option value="REPLACE">{b.importType === "VEHICLE_MASTER" ? "Add new and update existing vehicles from the sheet"
+                  : b.importType === "DOCUMENTS" ? "Also correct saved dates that are later than the sheet" : "Replace existing record (keeps history)"}</option>
               )}
             </select>
           </Field>
@@ -354,7 +401,9 @@ function SummaryStep({ b }: { b: Row }) {
   return (
     <Card title={b.status === "COMMITTED" ? "5. Import complete" : "Import cancelled"}>
       <div className="counts">
-        {[["Rows in file", b.totalRows], ["Inserted", b.insertedRows], ["Replaced", b.replacedRows], ["Skipped", b.skippedRows], ["Rejected", b.rejectedRows]]
+        {(b.importType === "DOCUMENTS"
+          ? [["Rows in file", b.totalRows], ["Documents added", b.insertedRows], ["Dates corrected", b.replacedRows], ["Already up to date", b.skippedRows], ["Rejected rows", b.rejectedRows]]
+          : [["Rows in file", b.totalRows], ["Inserted", b.insertedRows], ["Replaced", b.replacedRows], ["Skipped", b.skippedRows], ["Rejected", b.rejectedRows]])
           .map(([l, v]) => <div className="count-pill" key={l as string}><b>{number(v as number, 0)}</b>{l}</div>)}
       </div>
       <dl className="kv">
@@ -364,6 +413,7 @@ function SummaryStep({ b }: { b: Row }) {
         <dt>File fingerprint</dt><dd className="mono small">{b.fileSha256}</dd>
       </dl>
       <div className="form-actions">
+        {b.importType === "DOCUMENTS" && b.status === "COMMITTED" && <Link className="btn btn-primary" to="/documents">Open documents dashboard</Link>}
         <button className="btn" onClick={() => download(`/api/imports/${b.id}/errors`, { format: "xlsx" })}>Download error report (Excel)</button>
         <button className="btn" onClick={() => download(`/api/imports/${b.id}/errors`, { format: "csv" })}>Download error report (CSV)</button>
       </div>

@@ -24,14 +24,18 @@ import java.util.Map;
 public class JobService {
 
     private final JdbcTemplate jdbc;
+    private final WorkerMonitor worker;
 
-    public JobService(JdbcTemplate jdbc) {
+    public JobService(JdbcTemplate jdbc, WorkerMonitor worker) {
         this.jdbc = jdbc;
+        this.worker = worker;
     }
 
     public long enqueue(String type, Map<String, Object> payload) {
-        return jdbc.queryForObject("INSERT INTO background_jobs (job_type, payload, created_by) VALUES (?, CAST(? AS jsonb), ?) RETURNING id",
+        Long id = jdbc.queryForObject("INSERT INTO background_jobs (job_type, payload, created_by) VALUES (?, CAST(? AS jsonb), ?) RETURNING id",
                 Long.class, type, Json.write(payload), CurrentUser.idOrNull());
+        worker.wake();
+        return id;
     }
 
     public Map<String, Object> get(long id) {

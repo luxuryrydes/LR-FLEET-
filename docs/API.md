@@ -61,6 +61,9 @@ Status codes: 400 validation, 401 not signed in, 403 role, 404 not found, 409 co
 | GET | /api/service-status[/export] | READ | `due=OVERDUE,DUE_SOON,…` |
 | GET | /api/documents | READ | `vehicleId`, `driverId`, `docType` |
 | GET | /api/documents/compliance | READ | `{expired, expiring, missing, pendingVerification, driverLicences, reminderDays}` |
+| GET | /api/documents/matrix | READ | Documents dashboard: `q`, `registrationClass=COMMERCIAL\|PRIVATE\|UNKNOWN`, `docType`, `state=ATTENTION\|EXPIRED\|DUE_SOON\|MISSING\|NO_FILE` → `{types, summary, rows[{vehicle…, documents:{TYPE:{status, expiryDate, fileId…}}}]}` |
+| GET | /api/documents/matrix/export?format=xlsx\|csv | READ | Same as Excel |
+| POST | /api/documents/{id}/file | WRITE | `{fileId}`: attach or replace the scan (upload first with `/api/files`, purpose VEHICLE_DOCUMENT) |
 | POST/PUT | /api/documents[/{id}] | WRITE | |
 | POST | /api/documents/{id}/verify | MANAGE | `{status: VERIFIED\|REJECTED, remarks?}` |
 | POST | /api/files (multipart `file`, `purpose`) | WRITE | Attachments: FUEL_RECEIPT, SERVICE_INVOICE, VEHICLE_DOCUMENT, OTHER |
@@ -69,7 +72,7 @@ Status codes: 400 validation, 401 not signed in, 403 role, 404 not found, 409 co
 ## Imports & jobs
 | Method | Path | Role | Notes |
 |---|---|---|---|
-| POST | /api/imports (multipart `file`, `type=GPS_KM\|FUEL`) | WRITE | Creates a batch and queues header detection |
+| POST | /api/imports (multipart `file`, `type=GPS_KM\|FUEL\|VEHICLE_MASTER\|DOCUMENTS`) | WRITE | Creates a batch and queues header detection |
 | GET | /api/imports, /api/imports/{id} | READ | Batch includes `sheetInfo` and `sameFileImports` |
 | POST | /api/imports/{id}/mapping | WRITE | `{sheet, headerRow, mapping:{field: header}, options:{recordMode}}` |
 | GET | /api/imports/{id}/rows | READ | Staging rows, `status=VALID\|WARNING\|DUPLICATE\|REJECTED` |
@@ -78,6 +81,7 @@ Status codes: 400 validation, 401 not signed in, 403 role, 404 not found, 409 co
 | POST | /api/imports/{id}/retry, /cancel | WRITE | |
 | GET | /api/imports/{id}/errors?format=xlsx\|csv | READ | Row-level error report |
 | GET | /api/jobs/{id} | READ | Background job status/result |
+| GET | /api/worker/status | READ | `{online, lastSeen, queuedJobs, oldestQueuedSeconds, wakeConfigured}`. A pending import batch includes the same as `worker`. |
 
 ## Dashboard, reports, alerts, admin
 | Method | Path | Role | Notes |

@@ -9,6 +9,8 @@ FUEL_FIELDS = ["vehicle", "date", "time", "energyType", "quantity", "unitPrice",
                "transactionRef", "paymentMethod", "cardNumber", "notes"]
 MASTER_FIELDS = ["registration", "model", "fuelType", "modelYear", "operatorLabel", "driverName", "driverPhone", "department",
                  "registrationClass", "make", "category", "chassisNumber", "engineNumber", "gpsDeviceName", "soldDate", "soldTo", "remarks"]
+DOCUMENT_FIELDS = ["registration", "insuranceExpiry", "ownDamageExpiry", "pucExpiry", "fitnessExpiry", "roadTaxExpiry", "permitExpiry",
+                   "permit1yExpiry", "registrationDate", "registrationClass", "remarks"]
 
 # Lower-case, alphanumeric-only header keys. Order matters: earlier = stronger match.
 SYNONYMS: dict[str, dict[str, list[str]]] = {
@@ -60,6 +62,23 @@ SYNONYMS: dict[str, dict[str, list[str]]] = {
         "soldDate": ["solddate", "dateofsale", "saledate"],
         "soldTo": ["soldto", "dealer", "buyer", "dealername"],
         "remarks": ["remarks", "notes", "comment"],
+    },
+    # Field order matters: specific columns (registration date, permit 1 year) claim their header before the general ones.
+    "DOCUMENTS": {
+        "registration": ["vehicleno", "vehicalno", "vehiclenumber", "vehicalnumber", "registrationno", "registrationnumber", "regno",
+                         "carno"],
+        "registrationDate": ["registrationdate", "regdate", "dateofregistration", "rcdate"],
+        "permit1yExpiry": ["permit1yearenddate", "permit1yenddate", "permit1year", "permit1yr", "authorisationenddate",
+                           "authorizationenddate", "authorisation", "authorization"],
+        "permitExpiry": ["permit5yearsenddate", "permit5yearenddate", "permit5years", "permit5year", "permitenddate", "permitexpiry",
+                         "permitvalidity", "permit"],
+        "ownDamageExpiry": ["owndamageenddate", "owndamage", "odenddate", "odexpiry", "odinsurance"],
+        "insuranceExpiry": ["insuranceenddate", "insuranceexpiry", "insurancevalidity", "insurancedate", "insurance"],
+        "pucExpiry": ["pollutionenddate", "pullutionenddate", "pucenddate", "pucexpiry", "pollutionexpiry", "pollution", "pullution", "puc"],
+        "fitnessExpiry": ["fitnessenddate", "fitnessexpiry", "fitnessvalidity", "fitness"],
+        "roadTaxExpiry": ["hrroadtaxenddate", "roadtaxenddate", "hrtaxenddate", "taxenddate", "roadtaxexpiry", "roadtax", "hrtax"],
+        "registrationClass": ["commercialorprivate", "privateorcommercial", "privatecommercial", "commercialprivate", "registrationtype"],
+        "remarks": ["remarks", "remark", "notes"],
     },
 }
 

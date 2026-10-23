@@ -56,6 +56,11 @@ public class ImportService {
     public static final Set<String> MASTER_FIELDS = Set.of("registration", "model", "fuelType", "modelYear", "operatorLabel", "driverName",
             "driverPhone", "department", "registrationClass", "make", "category", "chassisNumber", "engineNumber", "gpsDeviceName",
             "soldDate", "soldTo", "remarks");
+    /** Documents register: one row per vehicle with an end-date column per document type. */
+    public static final Set<String> DOCUMENT_FIELDS = Set.of("registration", "registrationDate", "insuranceExpiry", "ownDamageExpiry",
+            "pucExpiry", "fitnessExpiry", "roadTaxExpiry", "permitExpiry", "permit1yExpiry", "registrationClass", "remarks");
+    private static final List<String> EXPIRY_FIELDS = List.of("insuranceExpiry", "ownDamageExpiry", "pucExpiry", "fitnessExpiry",
+            "roadTaxExpiry", "permitExpiry", "permit1yExpiry", "registrationDate");
 
     private final NamedParameterJdbcTemplate jdbc;
     private final FileService files;
@@ -66,14 +71,18 @@ public class ImportService {
     private final AlertService alerts;
     private final AuditService audit;
     private final MasterImportService master;
+    private final DocumentImportService documents;
+    private final com.lrtaxi.fleet.jobs.WorkerMonitor worker;
     private final TransactionTemplate tx;
     private final TransactionTemplate nested;
     private final TransactionTemplate requiresNew;
 
     public ImportService(NamedParameterJdbcTemplate jdbc, FileService files, JobService jobs, GpsService gps, FuelService fuel,
                          EfficiencyService efficiency, AlertService alerts, AuditService audit, MasterImportService master,
-                         PlatformTransactionManager tm) {
+                         DocumentImportService documents, com.lrtaxi.fleet.jobs.WorkerMonitor worker, PlatformTransactionManager tm) {
         this.master = master;
+        this.documents = documents;
+        this.worker = worker;
         this.jdbc = jdbc;
         this.files = files;
         this.jobs = jobs;
@@ -93,8 +102,8 @@ public class ImportService {
 
     @Transactional
     public Map<String, Object> upload(MultipartFile file, String type) {
-        if (!Set.of("GPS_KM", "FUEL", "VEHICLE_MASTER").contains(type)) {
-            throw ApiException.badRequest("INVALID_TYPE", "Import type must be GPS_KM, FUEL or VEHICLE_MASTER");
+        if (!Set.of("GPS_KM", "FUEL", "VEHICLE_MASTER", "DOCUMENTS").contains(type)) {
+            throw ApiException.badRequest("INVALID_TYPE", "Import type must be GPS_KM, FUEL, VEHICLE_MASTER or DOCUMENTS");
         }
         FileService.StoredFile f = files.store(file, "IMPORT");
         Long id = jdbc.queryForObject("""
@@ -120,6 +129,9 @@ public class ImportService {
                 SELECT id, status, created_at, committed_at FROM import_batches
                 WHERE file_sha256 = :sha AND id <> :id AND status IN ('COMMITTED', 'PARSED') ORDER BY id""",
                 new MapSqlParameterSource("sha", b.get("fileSha256")).addValue("id", id), Rows::map));
+        if (Set.of("HEADERS_PENDING", "PARSE_PENDING").contains(String.valueOf(b.get("status")))) {
+            b.put("worker", worker.status());        // waiting on the Python worker: tell the screen whether one is running
+        }
         return b;
     }
 
@@ -159,6 +171,7 @@ public class ImportService {
         Set<String> allowed = switch (type) {
             case "GPS_KM" -> GPS_FIELDS;
             case "FUEL" -> FUEL_FIELDS;
+            case "DOCUMENTS" -> DOCUMENT_FIELDS;
             default -> MASTER_FIELDS;
         };
         for (String k : mapping.keySet()) {
@@ -174,6 +187,7 @@ public class ImportService {
         List<String> required = switch (type) {
             case "GPS_KM" -> List.of("vehicle", "date", "km");
             case "FUEL" -> hasDefaultEnergy ? List.of("vehicle", "date", "quantity") : List.of("vehicle", "date", "energyType", "quantity");
+            case "DOCUMENTS" -> List.of("registration");
             default -> List.of("registration", "model", "fuelType");
         };
         for (String r : required) {
@@ -191,6 +205,8 @@ public class ImportService {
                 throw ApiException.badRequest("MAPPING_INCOMPLETE", "Trip files need the trip start timestamp column");
             }
             options.put("recordMode", mode);
+        } else if ("DOCUMENTS".equals(type) && EXPIRY_FIELDS.stream().allMatch(f -> mapping.get(f) == null || mapping.get(f).isBlank())) {
+            throw ApiException.badRequest("MAPPING_INCOMPLETE", "Map at least one end-date column (insurance, pollution, fitness, permit, road tax)");
         } else if ("FUEL".equals(type) && mapping.get("invoiceAmount") == null && mapping.get("grossAmount") == null && mapping.get("unitPrice") == null) {
             throw ApiException.badRequest("MAPPING_INCOMPLETE", "Map at least one amount column: invoice amount, value/gross or unit price");
         }
@@ -369,6 +385,8 @@ public class ImportService {
             counts = commitGps(id, b, replace, reason, touched);
         } else if ("FUEL".equals(b.get("import_type"))) {
             counts = commitFuel(id, touched);
+        } else if ("DOCUMENTS".equals(b.get("import_type"))) {
+            counts = documents.commit(id, replace, reason, (row, field, code, message, raw) -> rowError(id, row, field, code, message, raw));
         } else {
             counts = master.commit(id, replace, reason, (row, field, code, message, raw) -> rowError(id, row, field, code, message, raw));
         }

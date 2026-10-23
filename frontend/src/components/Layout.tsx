@@ -11,7 +11,7 @@ const NAV: { to: string; label: string; icon: string; perm?: Permission; section
   { to: "/fuel", label: "Fuel & energy", icon: "⛽" },
   { to: "/maintenance", label: "Maintenance", icon: "⚙" },
   { to: "/service-due", label: "Service due", icon: "⏱" },
-  { to: "/documents", label: "Compliance", icon: "▤" },
+  { to: "/documents", label: "Vehicle documents", icon: "▤" },
   { to: "/imports", label: "Imports", icon: "⇪", perm: "write", section: "Data" },
   { to: "/reports", label: "Reports", icon: "▦" },
   { to: "/masters", label: "Drivers & vendors", icon: "☰" },

@@ -7,6 +7,10 @@ Sample files are in [`samples/`](../samples): `gps_daily_km_sample.xlsx`, `fuel_
 
 ## Workflow
 
+Excel files are read by the separate Python **import worker**. If no worker is running, the file waits in the queue at
+"Reading the file…". The import screen then says that the worker is not running; nothing is lost, and the file continues as
+soon as a worker starts. The worker reports in every 15 seconds (`worker_heartbeats`); `GET /api/worker/status` shows it.
+
 | Step | Who | What happens |
 |---|---|---|
 | 1. Upload | User → Java | The file is stored privately and a SHA-256 fingerprint is recorded. An `import_batches` row is created as `HEADERS_PENDING`. |
@@ -92,6 +96,36 @@ Optional columns: Make, Category, Chassis No, Engine No, GPS Device Name, Sold D
 
 The status, driver type and GPS-km rules are in [CALCULATION_RULES.md §13](CALCULATION_RULES.md). The preview shows, for every
 row, whether the vehicle is new or an update, what its status will be, and whether its GPS km will be imported.
+
+## Vehicle documents register (permit / pollution / insurance sheet)
+
+Import type `DOCUMENTS`: one row per vehicle with an end-date column per document. Built for the company's
+"Permit- pollution- Insurance all details" workbook. The vehicles must already be in the vehicle master.
+
+| Field | Header examples | Document |
+|---|---|---|
+| registration (required) | Vehicle No, Vehical No | — |
+| insuranceExpiry | Insurance End Date | INSURANCE |
+| ownDamageExpiry | OWN DAMAGE | INSURANCE_OD |
+| pucExpiry | Pullution End Date, Pollution End Date, PUC | PUC |
+| fitnessExpiry | Fitness End Date | FITNESS |
+| roadTaxExpiry | HR Road Tax End Date, HR TAX END DATE | ROAD_TAX |
+| permitExpiry | Permit 5 Years End Date | PERMIT |
+| permit1yExpiry | Permit 1 Year End Date | PERMIT_1Y |
+| registrationDate | Registration Date | REGISTRATION (issue date) |
+| registrationClass | Commercial or Private (else taken from the tab name) | sets the vehicle's commercial / private class if blank |
+
+At least one end-date column must be mapped.
+
+* **Every tab** (option `allSheets`, on by default): besides the chosen tab, every tab with a vehicle column and an end-date
+  column is read. That includes Commercial cars, Private cars, and the monthly FITNESS / INSURANCE / PUC / PERMIT to-do lists.
+  Month titles and repeated header rows inside a tab are skipped.
+* **Latest date wins:** for each vehicle and document, the latest end date across all tabs is used. Rows whose dates are all older
+  are shown as *Older dates (not used)* with the tab and row that won.
+* **Values:** dates in any Indian format. `NA`, `Not Required`, `Nil` mean not required, and `LTT` means lifetime tax. Other text
+  (e.g. "New Number") is a warning and is ignored.
+* **Commit:** a later end date than the saved one is added as a renewal. The same date is skipped. An earlier date is skipped,
+  unless a manager chooses *Also correct saved dates* and gives a reason. Vehicles not in the master are rejected with a reason.
 
 ## Fuel-company statements used by LR Taxi
 

@@ -240,3 +240,29 @@ figure, written *kgL* (kg + L), and its mileage is km ÷ kgL. Example: 246 km wi
 vehicles with each other and the same vehicle month to month. It has no expected value or variance, and it is never added into the
 fleet km/kg or km/L. The fleet figure is weighted the same way: Σ km ÷ Σ kgL over mixed-fuel vehicles (`totals.mixedFuel`).
 Other combinations name their units in order, e.g. petrol + electricity is km/LkWh.
+
+
+## 15. Vehicle documents
+
+Implemented in `DocumentRules.java` and `DocumentService.matrix`; page **Vehicle documents** (`/documents`), API
+`GET /api/documents/matrix`.
+
+* **Current document** of a type = the non-void, non-rejected one with the latest end date. A renewal is a new document; the
+  old one stays as history. Correcting a wrong date voids the old record with a reason (it is never deleted).
+* **Required documents:** every active vehicle needs `docs.required_types` (default INSURANCE, PUC). Commercial vehicles
+  (`registration_class = COMMERCIAL`) also need FITNESS, PERMIT (5 years) and PERMIT_1Y. Own damage insurance, road tax and
+  registration are shown but never "missing".
+* **Not required:** NA / Not Required / LTT (lifetime road tax) in the register, or the "Not required" tick on the page, records the
+  document as not applicable. It counts as held and has no end date.
+
+| Status | Rule |
+|---|---|
+| EXPIRED | end date before today |
+| DUE_SOON | end date within the largest `docs.reminder_days` value (default 30) |
+| VALID | end date later than that |
+| NOT_REQUIRED | recorded as not applicable |
+| NO_EXPIRY | recorded without an end date (e.g. registration date only) |
+| MISSING | required and not recorded |
+
+A scan (PDF / photo) can be attached to any document. A newly attached scan is "awaiting verification" until a manager verifies it.
+Documents imported from the Excel register without a scan are not put in the verification queue.
