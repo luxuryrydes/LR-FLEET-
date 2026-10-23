@@ -164,6 +164,14 @@ intervals and data-quality status attached. A low figure is a prompt to investig
 | OVERDUE | remaining km < 0, **or** today > next service date |
 | DUE_SOON | 0 ≤ remaining km ≤ `service.due_soon_km` (500), or next date within `service.due_soon_days` |
 | MISSING_BASELINE / UNRELIABLE_BASELINE | no trusted odometer, or the baseline went backwards (date overdue still wins) |
+
+**Service register import.** Each row with a last-service odometer and/or date becomes an interval-resetting routine service
+(source IMPORT). The sheet's "Next Service" km is kept, and is flagged as an override only when it differs from odometer + interval.
+A dated row with an odometer also becomes a trusted odometer reading (the baseline), so GPS km after that date count towards the
+next service. Some rows have the odometer but no date ("DATE NOT RECORDED"). They keep the km-based reminder, have no date-based
+one, and show *No odometer* until a dated reading exists. Rows marked MISCELLANEOUS, or with neither a date nor an odometer, are
+not imported; those vehicles stay under *No service record*. If the latest dated service and an undated one both exist, the dated
+one is the last service.
 | OK | otherwise |
 
 ## 11. Odometer progression

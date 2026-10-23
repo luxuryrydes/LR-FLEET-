@@ -127,6 +127,32 @@ At least one end-date column must be mapped.
 * **Commit:** a later end date than the saved one is added as a renewal. The same date is skipped. An earlier date is skipped,
   unless a manager chooses *Also correct saved dates* and gives a reason. Vehicles not in the master are rejected with a reason.
 
+## Vehicle service register
+
+Import type `SERVICE`: one row per vehicle with the last service. Built for the company's "VEHICLE SERVICE RECORD &
+MAINTENANCE TRACKER" sheet. The summary block above the table is skipped automatically, and vehicles must be in the vehicle master.
+
+| Field | Header examples |
+|---|---|
+| registration (required) | Registration No., Vehicle No |
+| serviceDate | Service Date, Last Service Date |
+| odometerKm | Last Service Odometer (KM), Odometer |
+| nextServiceOdometer | Next Service, Next Service KM |
+| nextServiceDate | Next Service Date |
+| recordStatus | Service Record (RECORDED / DATE NOT RECORDED / MISCELLANEOUS) |
+| category, description, workshopName, totalCost, invoiceNumber, remarks | Service Type, Work Done, Workshop, Amount, Invoice No, Remarks |
+
+Map the service date or the odometer column (at least one). Rows are checked like this:
+* A future service date is rejected.
+* An odometer outside 0–2,000,000 is ignored with a warning.
+* A next-service km that isn't above the last-service odometer is ignored.
+* "Date not recorded" is a warning: the km reminder only.
+* MISCELLANEOUS or empty rows show as *No service on record* and are not imported.
+
+At commit, a service already saved (same vehicle, category, date and odometer) is skipped, so the register can be imported again
+after each update. The service type comes from the text (oil, tyre, brake, battery, accident, body/paint, filter, EV, repair);
+otherwise it is a routine service.
+
 ## Fuel-company statements used by LR Taxi
 
 | Statement | How to import | What happens automatically |

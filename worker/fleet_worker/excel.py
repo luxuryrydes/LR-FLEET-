@@ -6,7 +6,7 @@ import io
 from datetime import date, datetime, time
 from pathlib import Path
 
-from .mapping import DOCUMENT_FIELDS, FUEL_FIELDS, GPS_FIELDS, MASTER_FIELDS, header_score, suggest_mapping
+from .mapping import DOCUMENT_FIELDS, FUEL_FIELDS, GPS_FIELDS, MASTER_FIELDS, SERVICE_FIELDS, header_score, suggest_mapping
 
 MAX_HEADER_SCAN = 30
 SAMPLE_ROWS = 5
@@ -202,7 +202,8 @@ def describe_file(path: Path) -> dict:
             "sample": sample,
             "suggestedMapping": {"GPS_KM": suggest_mapping(headers, "GPS_KM"), "FUEL": suggest_mapping(headers, "FUEL"),
                                  "VEHICLE_MASTER": suggest_mapping(headers, "VEHICLE_MASTER"),
-                                 "DOCUMENTS": suggest_mapping(headers, "DOCUMENTS")},
+                                 "DOCUMENTS": suggest_mapping(headers, "DOCUMENTS"),
+                                 "SERVICE": suggest_mapping(headers, "SERVICE")},
         })
     return {"sheets": sheets, "targetFields": {"GPS_KM": GPS_FIELDS, "FUEL": FUEL_FIELDS, "VEHICLE_MASTER": MASTER_FIELDS,
-                                               "DOCUMENTS": DOCUMENT_FIELDS}}
+                                               "DOCUMENTS": DOCUMENT_FIELDS, "SERVICE": SERVICE_FIELDS}}

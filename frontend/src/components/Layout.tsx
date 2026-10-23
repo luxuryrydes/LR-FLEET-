@@ -10,7 +10,7 @@ const NAV: { to: string; label: string; icon: string; perm?: Permission; section
   { to: "/gps", label: "GPS kilometres", icon: "⌖" },
   { to: "/fuel", label: "Fuel & energy", icon: "⛽" },
   { to: "/maintenance", label: "Maintenance", icon: "⚙" },
-  { to: "/service-due", label: "Service due", icon: "⏱" },
+  { to: "/service-due", label: "Vehicle service", icon: "⏱" },
   { to: "/documents", label: "Vehicle documents", icon: "▤" },
   { to: "/imports", label: "Imports", icon: "⇪", perm: "write", section: "Data" },
   { to: "/reports", label: "Reports", icon: "▦" },

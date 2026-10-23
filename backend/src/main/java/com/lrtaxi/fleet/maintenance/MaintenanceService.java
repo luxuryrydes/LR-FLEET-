@@ -56,12 +56,13 @@ public class MaintenanceService {
                    sc.resets_service_interval, m.description, m.parts_cost, m.labour_cost, m.other_cost, m.tax_amount, m.calculated_total,
                    m.total_cost, m.cost_mismatch, m.workshop_name, m.vendor_id, vd.name AS vendor_name, m.invoice_number, m.job_card_number,
                    m.attachment_file_id, m.next_service_date, m.next_service_odometer, m.next_service_overridden, m.remarks,
-                   m.is_void, m.void_reason, m.created_at, u.full_name AS created_by_name
+                   m.is_void, m.void_reason, m.created_at, u.full_name AS created_by_name, m.source, sf.original_filename AS attachment_name
             FROM maintenance_records m
             JOIN vehicles v ON v.id = m.vehicle_id
             JOIN service_categories sc ON sc.code = m.category_code
             LEFT JOIN vendors vd ON vd.id = m.vendor_id
             LEFT JOIN users u ON u.id = m.created_by
+            LEFT JOIN stored_files sf ON sf.id = m.attachment_file_id
             """;
 
     static final Map<String, String> SORTABLE = Map.of("serviceDate", "m.service_date", "registrationNumber", "v.registration_normalized",
@@ -103,6 +104,12 @@ public class MaintenanceService {
         }
         f.appendVehicleConditions(w, p, "v");
         return w;
+    }
+
+    /** All service records of one vehicle (including imported ones without a date), newest first. */
+    public List<Map<String, Object>> history(long vehicleId) {
+        return jdbc.query(SELECT + " WHERE m.vehicle_id = :v AND NOT m.is_void ORDER BY m.service_date DESC NULLS LAST, m.odometer_km DESC NULLS LAST, m.id DESC LIMIT 200",
+                Map.of("v", vehicleId), Rows::map);
     }
 
     public Map<String, Object> get(long id) {
@@ -190,6 +197,22 @@ public class MaintenanceService {
         out.put("nextServiceOdometer", nextOdo);
         out.put("nextServiceDate", nextDate);
         return out;
+    }
+
+    @Transactional
+    public void attachFile(long id, long fileId) {
+        Integer ok = jdbc.queryForObject("SELECT count(*) FROM stored_files WHERE id = :f AND purpose IN ('SERVICE_INVOICE', 'VEHICLE_DOCUMENT', 'OTHER')",
+                Map.of("f", fileId), Integer.class);
+        if (ok == null || ok == 0) {
+            throw ApiException.badRequest("INVALID_FILE", "Upload the job card or invoice first");
+        }
+        Map<String, Object> before = get(id);
+        if (Boolean.TRUE.equals(before.get("isVoid"))) {
+            throw ApiException.badRequest("ALREADY_VOID", "Record is void");
+        }
+        jdbc.update("UPDATE maintenance_records SET attachment_file_id = :f, updated_by = :u, updated_at = now() WHERE id = :id",
+                new MapSqlParameterSource("f", fileId).addValue("u", CurrentUser.idOrNull()).addValue("id", id));
+        audit.record("ATTACH_FILE", "MAINTENANCE_RECORD", id, Map.of("fileId", String.valueOf(before.get("attachmentFileId"))), Map.of("fileId", fileId));
     }
 
     @Transactional

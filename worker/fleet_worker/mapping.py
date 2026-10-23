@@ -9,6 +9,8 @@ FUEL_FIELDS = ["vehicle", "date", "time", "energyType", "quantity", "unitPrice",
                "transactionRef", "paymentMethod", "cardNumber", "notes"]
 MASTER_FIELDS = ["registration", "model", "fuelType", "modelYear", "operatorLabel", "driverName", "driverPhone", "department",
                  "registrationClass", "make", "category", "chassisNumber", "engineNumber", "gpsDeviceName", "soldDate", "soldTo", "remarks"]
+SERVICE_FIELDS = ["registration", "serviceDate", "odometerKm", "nextServiceOdometer", "nextServiceDate", "recordStatus", "category",
+                  "description", "workshopName", "totalCost", "invoiceNumber", "remarks"]
 DOCUMENT_FIELDS = ["registration", "insuranceExpiry", "ownDamageExpiry", "pucExpiry", "fitnessExpiry", "roadTaxExpiry", "permitExpiry",
                    "permit1yExpiry", "registrationDate", "registrationClass", "remarks"]
 
@@ -62,6 +64,22 @@ SYNONYMS: dict[str, dict[str, list[str]]] = {
         "soldDate": ["solddate", "dateofsale", "saledate"],
         "soldTo": ["soldto", "dealer", "buyer", "dealername"],
         "remarks": ["remarks", "notes", "comment"],
+    },
+    # Next service date before next service odometer: "Next Service Date" must not be taken as the km column.
+    "SERVICE": {
+        "registration": ["registrationno", "registrationnumber", "vehicleno", "vehicalno", "vehiclenumber", "regno", "registerno", "carno"],
+        "nextServiceDate": ["nextservicedate", "nextserviceduedate", "nextduedate"],
+        "nextServiceOdometer": ["nextservicekm", "nextserviceodometer", "nextserviceat", "nextservicedue", "nextservice", "nextdue"],
+        "serviceDate": ["servicedate", "lastservicedate", "dateofservice", "date"],
+        "odometerKm": ["lastserviceodometerkm", "lastserviceodometer", "lastservicekm", "serviceodometer", "odometerkm", "odometer",
+                       "kmreading", "odoreading", "kms", "km"],
+        "recordStatus": ["servicerecord", "recordstatus", "servicestatus"],
+        "category": ["servicetype", "typeofservice", "category", "worktype"],
+        "description": ["description", "workdone", "jobdescription", "work"],
+        "workshopName": ["workshop", "workshopname", "servicecenter", "servicecentre", "garage", "dealer"],
+        "totalCost": ["totalcost", "amount", "cost", "billamount", "invoiceamount"],
+        "invoiceNumber": ["invoiceno", "billno", "jobcardno", "jobcard"],
+        "remarks": ["remarks", "remark", "notes"],
     },
     # Field order matters: specific columns (registration date, permit 1 year) claim their header before the general ones.
     "DOCUMENTS": {

@@ -38,10 +38,12 @@ public class ServiceStatusService {
             ),
             last_service AS (
                 SELECT DISTINCT ON (m.vehicle_id) m.vehicle_id, m.id AS service_id, m.service_date, m.odometer_km,
-                       m.next_service_odometer, m.next_service_date, m.next_service_overridden
+                       m.next_service_odometer, m.next_service_date, m.next_service_overridden, m.workshop_name, m.source AS service_source,
+                       m.attachment_file_id, f.original_filename AS service_file_name
                 FROM maintenance_records m JOIN service_categories sc ON sc.code = m.category_code
+                LEFT JOIN stored_files f ON f.id = m.attachment_file_id
                 WHERE NOT m.is_void AND sc.resets_service_interval AND m.vehicle_id IN (SELECT id FROM v)
-                ORDER BY m.vehicle_id, m.service_date DESC, m.id DESC
+                ORDER BY m.vehicle_id, m.service_date DESC NULLS LAST, m.odometer_km DESC NULLS LAST, m.id DESC
             ),
             latest AS (
                 SELECT DISTINCT ON (o.vehicle_id) o.vehicle_id, o.id AS reading_id, o.reading_date, o.reading_km
@@ -50,7 +52,8 @@ public class ServiceStatusService {
                 ORDER BY o.vehicle_id, o.reading_date DESC, o.reading_km DESC, o.id DESC
             )
             SELECT v.*, ls.service_id, ls.service_date, ls.odometer_km AS service_odometer, ls.next_service_odometer,
-                   ls.next_service_date, ls.next_service_overridden,
+                   ls.next_service_date, ls.next_service_overridden, ls.workshop_name, ls.service_source, ls.attachment_file_id,
+                   ls.service_file_name,
                    l.reading_id, l.reading_date, l.reading_km,
                    (SELECT max(o.reading_km) FROM odometer_readings o
                      WHERE o.vehicle_id = v.id AND o.is_trusted AND NOT o.is_void AND o.reading_date < l.reading_date) AS prior_max_km,
@@ -145,6 +148,13 @@ public class ServiceStatusService {
         m.put("lastServiceId", Rows.longOrNull(rs, "service_id"));
         m.put("lastServiceDate", Rows.date(rs, "service_date"));
         m.put("lastServiceOdometer", rs.getBigDecimal("service_odometer"));
+        LocalDate lastDate = Rows.date(rs, "service_date");
+        m.put("daysSinceService", lastDate == null ? null : java.time.temporal.ChronoUnit.DAYS.between(lastDate, today));
+        m.put("serviceDateRecorded", lastDate != null);
+        m.put("lastServiceWorkshop", rs.getString("workshop_name"));
+        m.put("lastServiceSource", rs.getString("service_source"));
+        m.put("lastServiceFileId", Rows.longOrNull(rs, "attachment_file_id"));
+        m.put("lastServiceFileName", rs.getString("service_file_name"));
         m.put("baselineDate", baseline == null ? null : baseline.date());
         m.put("baselineKm", baseline == null ? null : baseline.km());
         m.put("gpsKmAfterBaseline", rs.getBigDecimal("gps_after"));

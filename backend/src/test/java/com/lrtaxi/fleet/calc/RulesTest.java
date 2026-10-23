@@ -157,6 +157,18 @@ class RulesTest {
     }
 
     @Test
+    void undatedImportedServiceKeepsTheKmReminderOnly() {
+        // Service register row "DATE NOT RECORDED": last service at 132,806 km, date unknown.
+        Odometer.Baseline base = new Odometer.Baseline(T.minusDays(30), b("140000"), true, 1);
+        var res = ServiceDue.evaluate(svc(null, "132806", base, "2400", 6));
+        assertThat(res.nextServiceOdometer()).isEqualByComparingTo("142806");
+        assertThat(res.remainingKm()).isEqualByComparingTo("406");
+        assertThat(res.status()).isEqualTo(ServiceDue.Status.DUE_SOON);
+        assertThat(res.nextServiceDate()).isNull();
+        assertThat(res.reasons()).anyMatch(r -> r.contains("date not recorded"));
+    }
+
+    @Test
     void explicitNextServiceOverride() {
         Odometer.Baseline base = new Odometer.Baseline(T, b("54800"), true, 1);
         var in = new ServiceDue.Input(T.minusDays(5), b("50000"), b("55000"), null, 10000, 0, base, b("0"), T, 500, 15);

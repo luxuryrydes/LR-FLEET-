@@ -49,6 +49,12 @@ fitness, road tax, both permits and RC: red = expired, amber = due within 30 day
 upload the scan, or drag a PDF/photo onto it. Load your register with *Import documents register (Excel)*, for example
 `Permit- pollution- Insurance all details.xlsx`. All tabs are read and the latest end date per vehicle wins.
 
+**Vehicle service:** menu → *Vehicle service*. Cards for overdue, due soon, OK, no service record, date not recorded, no odometer
+and job card scans; click one to filter. Each row shows the last service, current estimated km, next service km with a progress
+bar, next service date and the job card / invoice. Click *Record / upload* to enter a service, upload a scan or see the history,
+or drag a PDF/photo onto the Job card box. Load your register with *Import service register (Excel)*, for example
+`VEHICLE_SERVICE_AFTER_REMOVING_VENDOR_REG_NUMBERS.xlsx`.
+
 **"Reading the file…" never finishes?** The import worker isn't running. The import screen now says so. Keep the
 *Import worker* window open locally, or deploy the worker on Render (see [DEPLOYMENT](docs/DEPLOYMENT.md)).
 

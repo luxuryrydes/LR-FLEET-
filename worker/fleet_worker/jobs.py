@@ -17,6 +17,7 @@ from psycopg.types.json import Jsonb
 
 from .config import Config
 from .documents import documents_sheets, parse_documents
+from .service import parse_service
 from .excel import FileFormatError, describe_file, read_rows, sheet_names
 from .parsers import ParseResult, VehicleIndex, fill_key, mark_already_recorded, parse_fuel, parse_gps, parse_master
 from .reconcile import reconcile, write_workbook
@@ -211,7 +212,7 @@ def parse_import(conn: psycopg.Connection, storage: Storage, batch_id: int) -> d
         result = parse_documents(_with_file(storage, b, read_all), index, today)
     else:
         rows = _with_file(storage, b, lambda p: read_rows(p, None if sheet == "CSV" else sheet))
-        parser = {"GPS_KM": parse_gps, "FUEL": parse_fuel, "VEHICLE_MASTER": parse_master}[b["import_type"]]
+        parser = {"GPS_KM": parse_gps, "FUEL": parse_fuel, "VEHICLE_MASTER": parse_master, "SERVICE": parse_service}[b["import_type"]]
         result = parser(rows, b["header_row"] or 1, mapping, options, index, settings, today)
     if b["import_type"] == "FUEL":
         mark_already_recorded(result.rows, existing_fills(conn, result))

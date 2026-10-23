@@ -7,7 +7,7 @@ import { date, dateTime, label, number } from "../lib/format";
 import { ImportPreview } from "../components/ImportPreview";
 import { Badge, Card, ErrorBox, Field, Notice, PageHeader, Spinner, Tabs } from "../components/ui";
 
-type ImportType = "GPS_KM" | "FUEL" | "VEHICLE_MASTER" | "DOCUMENTS";
+type ImportType = "GPS_KM" | "FUEL" | "VEHICLE_MASTER" | "DOCUMENTS" | "SERVICE";
 const FIELD_LABELS: Record<string, string> = {
   vehicle: "Vehicle number / GPS device name", date: "Date", km: "Distance (km)", tripStart: "Trip start time", time: "Time",
   energyType: "Fuel type", quantity: "Quantity", unitPrice: "Rate / price per unit", grossAmount: "Value (before discount)",
@@ -21,11 +21,14 @@ const FIELD_LABELS: Record<string, string> = {
   insuranceExpiry: "Insurance end date", ownDamageExpiry: "Own damage insurance end date", pucExpiry: "Pollution (PUC) end date",
   fitnessExpiry: "Fitness end date", roadTaxExpiry: "Road tax end date", permitExpiry: "Permit 5 years end date",
   permit1yExpiry: "Permit 1 year end date", registrationDate: "Registration date",
+  serviceDate: "Last service date", nextServiceOdometer: "Next service at (km)", nextServiceDate: "Next service date",
+  recordStatus: "Service record (RECORDED / MISCELLANEOUS…)", description: "Work done", workshopName: "Workshop / service centre",
+  totalCost: "Service cost",
 };
 const EXPIRY_FIELDS = ["insuranceExpiry", "ownDamageExpiry", "pucExpiry", "fitnessExpiry", "roadTaxExpiry", "permitExpiry", "permit1yExpiry", "registrationDate"];
 const REQUIRED: Record<ImportType, string[]> = {
   GPS_KM: ["vehicle", "date", "km"], FUEL: ["vehicle", "date", "energyType", "quantity"], VEHICLE_MASTER: ["registration", "model", "fuelType"],
-  DOCUMENTS: ["registration"],
+  DOCUMENTS: ["registration"], SERVICE: ["registration"],
 };
 const STEP_ORDER = ["Upload", "Map columns", "Preview & validate", "Confirm", "Summary"];
 
@@ -91,6 +94,7 @@ export function ImportWizardPage() {
                 <option value="FUEL">Fuel / energy transactions</option>
                 <option value="VEHICLE_MASTER">Vehicle master (vehicles, drivers, vendors, departments)</option>
                 <option value="DOCUMENTS">Vehicle documents register (insurance, pollution, fitness, permit, road tax end dates)</option>
+                <option value="SERVICE">Vehicle service register (last service odometer, date, next service)</option>
               </select>
             </Field>
             <Field label="File" required hint="Max 50 MB. The original file is kept in private storage.">
@@ -184,7 +188,7 @@ export function MappingStep({ b, onDone }: { b: Row; onDone: () => void }) {
 
   const missing = REQUIRED[type].filter((f) => !mapping[f] && !(f === "energyType" && defaultEnergy));
   const needsAmount = type === "FUEL" && !mapping.invoiceAmount && !mapping.grossAmount && !mapping.unitPrice;
-  const needsDate = type === "DOCUMENTS" && EXPIRY_FIELDS.every((f) => !mapping[f]);
+  const needsDate = (type === "DOCUMENTS" && EXPIRY_FIELDS.every((f) => !mapping[f])) || (type === "SERVICE" && !mapping.serviceDate && !mapping.odometerKm);
 
   const submit = async () => {
     setBusy(true);
@@ -251,7 +255,8 @@ export function MappingStep({ b, onDone }: { b: Row; onDone: () => void }) {
         ))}
       </div>
       {needsAmount && <Notice kind="warning">Map at least one amount column: invoice amount/cost, value or rate.</Notice>}
-      {needsDate && <Notice kind="warning">Map at least one end-date column (insurance, pollution, fitness, permit or road tax).</Notice>}
+      {needsDate && <Notice kind="warning">{type === "SERVICE" ? "Map the last service date or the service odometer column."
+        : "Map at least one end-date column (insurance, pollution, fitness, permit or road tax)."}</Notice>}
       <h3 style={{ fontSize: 14, margin: "16px 0 8px" }}>First rows in the file</h3>
       <div className="table-scroll">
         <table className="table">
@@ -295,6 +300,7 @@ function PreviewStep({ b, onDone }: { b: Row; onDone: () => void }) {
       qc.invalidateQueries({ queryKey: ["gps"] });
       qc.invalidateQueries({ queryKey: ["fuel"] });
       qc.invalidateQueries({ queryKey: ["doc-matrix"] });
+      qc.invalidateQueries({ queryKey: ["service-status"] });
       onDone();
     } catch (e) {
       setError(e);
@@ -312,6 +318,7 @@ function PreviewStep({ b, onDone }: { b: Row; onDone: () => void }) {
     { key: "REJECTED" as View, label: "Rejected", count: b.rejectedRows },
     ...(b.importType === "GPS_KM" ? [{ key: "EXCLUDED" as View, label: "Not our driver (skipped)", count: b.excludedRows }] : []),
     ...(b.importType === "DOCUMENTS" ? [{ key: "EXCLUDED" as View, label: "No dates", count: b.excludedRows }] : []),
+    ...(b.importType === "SERVICE" ? [{ key: "EXCLUDED" as View, label: "No service on record", count: b.excludedRows }] : []),
   ], [b]);
 
   return (
@@ -365,6 +372,11 @@ function PreviewStep({ b, onDone }: { b: Row; onDone: () => void }) {
         {b.importType === "VEHICLE_MASTER" && (
           <p>{number(importable, 0)} vehicles will be checked by the server. New registrations are added. Choose below whether vehicles already in the system are updated from the sheet. Vehicles marked sold keep their sold status.</p>
         )}
+        {b.importType === "SERVICE" && (
+          <p>{number(importable, 0)} services will be checked by the server and saved as routine services. Each one restarts the service
+            interval, and a dated one with an odometer reading becomes the odometer baseline (GPS km after it are added). Services already
+            saved (same vehicle, date and odometer) are skipped, so the register can be imported again after every update.</p>
+        )}
         {b.importType === "DOCUMENTS" && (
           <p>{number(importable, 0)} vehicles will be checked by the server. A later end date than the one saved is added as a renewal (the old
             document stays in the history); the same date is skipped. Vehicles must already be in the vehicle master.</p>
@@ -374,7 +386,7 @@ function PreviewStep({ b, onDone }: { b: Row; onDone: () => void }) {
             <select value={policy} onChange={(e) => setPolicy(e.target.value as "SKIP" | "REPLACE")} aria-label="Duplicate policy">
               <option value="SKIP">{b.importType === "VEHICLE_MASTER" ? "Add new vehicles only (keep existing unchanged)"
                 : b.importType === "DOCUMENTS" ? "Add new and later end dates only" : "Keep existing record (skip)"}</option>
-              {can(user, "manage") && b.importType !== "FUEL" && (
+              {can(user, "manage") && b.importType !== "FUEL" && b.importType !== "SERVICE" && (
                 <option value="REPLACE">{b.importType === "VEHICLE_MASTER" ? "Add new and update existing vehicles from the sheet"
                   : b.importType === "DOCUMENTS" ? "Also correct saved dates that are later than the sheet" : "Replace existing record (keeps history)"}</option>
               )}
@@ -403,6 +415,8 @@ function SummaryStep({ b }: { b: Row }) {
       <div className="counts">
         {(b.importType === "DOCUMENTS"
           ? [["Rows in file", b.totalRows], ["Documents added", b.insertedRows], ["Dates corrected", b.replacedRows], ["Already up to date", b.skippedRows], ["Rejected rows", b.rejectedRows]]
+          : b.importType === "SERVICE"
+          ? [["Rows in file", b.totalRows], ["Services added", b.insertedRows], ["Already saved", b.skippedRows], ["No service on record", b.excludedRows], ["Rejected", b.rejectedRows]]
           : [["Rows in file", b.totalRows], ["Inserted", b.insertedRows], ["Replaced", b.replacedRows], ["Skipped", b.skippedRows], ["Rejected", b.rejectedRows]])
           .map(([l, v]) => <div className="count-pill" key={l as string}><b>{number(v as number, 0)}</b>{l}</div>)}
       </div>
@@ -414,6 +428,7 @@ function SummaryStep({ b }: { b: Row }) {
       </dl>
       <div className="form-actions">
         {b.importType === "DOCUMENTS" && b.status === "COMMITTED" && <Link className="btn btn-primary" to="/documents">Open documents dashboard</Link>}
+        {b.importType === "SERVICE" && b.status === "COMMITTED" && <Link className="btn btn-primary" to="/service-due">Open service dashboard</Link>}
         <button className="btn" onClick={() => download(`/api/imports/${b.id}/errors`, { format: "xlsx" })}>Download error report (Excel)</button>
         <button className="btn" onClick={() => download(`/api/imports/${b.id}/errors`, { format: "csv" })}>Download error report (CSV)</button>
       </div>

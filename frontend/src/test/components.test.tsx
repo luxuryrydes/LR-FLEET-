@@ -264,3 +264,38 @@ describe("Vehicle documents dashboard", () => {
     expect(screen.getByText(/render-free.yaml/)).toBeInTheDocument();
   });
 });
+
+describe("Vehicle service portal", () => {
+  const row = (reg: string, status: string, extra: Record<string, unknown> = {}) => ({
+    vehicleId: reg.length, registrationNumber: reg, model: "Dzire", status, intervalKm: 10000, reasons: [], lastServiceId: null,
+    serviceDateRecorded: false, lastServiceOdometer: null, currentOdometer: null, nextServiceOdometer: null, remainingKm: null,
+    nextServiceDate: null, daysRemaining: null, lastServiceFileId: null, ...extra,
+  });
+  const rows = [
+    row("DL1CAH7243", "DUE_SOON", { vehicleId: 1, lastServiceId: 11, serviceDateRecorded: true, lastServiceDate: "2026-09-25", lastServiceOdometer: 178024,
+      daysSinceService: 28, currentOdometer: 187724, nextServiceOdometer: 188024, remainingKm: 300, nextServiceDate: "2027-03-25", daysRemaining: 153,
+      lastServiceFileId: 7, lastServiceFileName: "jobcard.pdf" }),
+    row("HR51CS9447", "MISSING_BASELINE", { vehicleId: 2, lastServiceId: 12, lastServiceOdometer: 132806, nextServiceOdometer: 142806 }),
+    row("DL1CAK4856", "MISSING_SERVICE_RECORD", { vehicleId: 3 }),
+  ];
+
+  it("shows last and next service, scans and filters from the cards", async () => {
+    const { api } = await import("../lib/api");
+    const { ServiceDuePage } = await import("../pages/ServiceDue");
+    const spy = vi.spyOn(api, "get").mockImplementation(async () => rows as never);
+    wrap(
+      <authModule.AuthContext.Provider value={{ user: { id: 1, email: "u@x", fullName: "U", roles: ["OPERATOR"] }, loading: false, login: vi.fn(), logout: vi.fn() }}>
+        <ServiceDuePage />
+      </authModule.AuthContext.Provider>,
+    );
+    const table = await screen.findByRole("table", { name: "Vehicle service" });
+    expect(within(table).getByText(/300 km left/)).toBeInTheDocument();
+    expect(within(table).getByText("date not recorded")).toBeInTheDocument();
+    expect(within(table).getByText(/jobcard\.pdf/)).toBeInTheDocument();
+    expect(within(table).getByText("⤒ not uploaded")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Show Date not recorded" }));
+    expect(within(table).queryByText("DL1CAH7243")).not.toBeInTheDocument();
+    expect(within(table).getByText("HR51CS9447")).toBeInTheDocument();
+    spy.mockRestore();
+  }, 30000);
+});

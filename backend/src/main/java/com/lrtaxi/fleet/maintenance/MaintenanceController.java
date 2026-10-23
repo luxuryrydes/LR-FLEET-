@@ -46,6 +46,12 @@ public class MaintenanceController {
         return maintenance.list(filter, category, includeVoid, page, size, sort);
     }
 
+    @GetMapping("/maintenance/vehicle/{vehicleId}")
+    @PreAuthorize(Roles.READ)
+    public List<Map<String, Object>> history(@PathVariable long vehicleId) {
+        return maintenance.history(vehicleId);
+    }
+
     @GetMapping("/maintenance/{id}")
     @PreAuthorize(Roles.READ)
     public Map<String, Object> get(@PathVariable long id) {
@@ -85,5 +91,16 @@ public class MaintenanceController {
             Exporter.num("Current est. odometer", "currentOdometer"), Exporter.num("Remaining km", "remainingKm"),
             Exporter.date("Next service date", "nextServiceDate"), Exporter.integer("Days remaining", "daysRemaining"),
             Exporter.date("Odometer baseline date", "baselineDate"), Exporter.num("Baseline km", "baselineKm"),
-            Exporter.num("GPS km since baseline", "gpsKmAfterBaseline"));
+            Exporter.num("GPS km since baseline", "gpsKmAfterBaseline"), Exporter.integer("Days since service", "daysSinceService"),
+            Exporter.col("Workshop", "lastServiceWorkshop"), Exporter.col("Job card / invoice scan", "lastServiceFileName"));
+
+    public record AttachRequest(@jakarta.validation.constraints.NotNull Long fileId) {
+    }
+
+    /** Attach or replace the job card / invoice scan of a service record (upload first: POST /api/files, purpose SERVICE_INVOICE). */
+    @PostMapping("/maintenance/{id}/file")
+    @PreAuthorize(Roles.WRITE)
+    public void attach(@PathVariable long id, @Valid @RequestBody AttachRequest req) {
+        maintenance.attachFile(id, req.fileId());
+    }
 }

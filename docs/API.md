@@ -58,7 +58,9 @@ Status codes: 400 validation, 401 not signed in, 403 role, 404 not found, 409 co
 | POST | /api/fuel/{id}/void | MANAGE | `{reason}`. Kept for audit and excluded from calculations. |
 | GET/POST | /api/maintenance | READ/WRITE | Returns `{id, warnings, nextServiceOdometer, nextServiceDate}` |
 | POST | /api/maintenance/{id}/void | MANAGE | |
-| GET | /api/service-status[/export] | READ | `due=OVERDUE,DUE_SOON,…` |
+| POST | /api/maintenance/{id}/file | WRITE | `{fileId}`: attach or replace the job card / invoice scan (upload first with `/api/files`, purpose SERVICE_INVOICE) |
+| GET | /api/maintenance/vehicle/{vehicleId} | READ | Every service record of the vehicle, newest first, including imported ones without a date |
+| GET | /api/service-status[/export] | READ | `due=OVERDUE,DUE_SOON,…`. Rows include `daysSinceService`, `serviceDateRecorded`, `lastServiceWorkshop`, `lastServiceSource`, `lastServiceFileId/Name` |
 | GET | /api/documents | READ | `vehicleId`, `driverId`, `docType` |
 | GET | /api/documents/compliance | READ | `{expired, expiring, missing, pendingVerification, driverLicences, reminderDays}` |
 | GET | /api/documents/matrix | READ | Documents dashboard: `q`, `registrationClass=COMMERCIAL\|PRIVATE\|UNKNOWN`, `docType`, `state=ATTENTION\|EXPIRED\|DUE_SOON\|MISSING\|NO_FILE` → `{types, summary, rows[{vehicle…, documents:{TYPE:{status, expiryDate, fileId…}}}]}` |
@@ -72,7 +74,7 @@ Status codes: 400 validation, 401 not signed in, 403 role, 404 not found, 409 co
 ## Imports & jobs
 | Method | Path | Role | Notes |
 |---|---|---|---|
-| POST | /api/imports (multipart `file`, `type=GPS_KM\|FUEL\|VEHICLE_MASTER\|DOCUMENTS`) | WRITE | Creates a batch and queues header detection |
+| POST | /api/imports (multipart `file`, `type=GPS_KM\|FUEL\|VEHICLE_MASTER\|DOCUMENTS\|SERVICE`) | WRITE | Creates a batch and queues header detection |
 | GET | /api/imports, /api/imports/{id} | READ | Batch includes `sheetInfo` and `sameFileImports` |
 | POST | /api/imports/{id}/mapping | WRITE | `{sheet, headerRow, mapping:{field: header}, options:{recordMode}}` |
 | GET | /api/imports/{id}/rows | READ | Staging rows, `status=VALID\|WARNING\|DUPLICATE\|REJECTED` |

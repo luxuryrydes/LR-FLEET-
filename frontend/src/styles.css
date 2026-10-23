@@ -226,3 +226,21 @@ input[type="checkbox"], input[type="radio"] { width: auto; }
 .doc-OPTIONAL .doc-btn { color: var(--muted); }
 .doc-nofile { color: var(--amber); font-weight: 700; }
 td.doc-cell:has(.doc-btn:hover) { background: transparent; }
+
+/* ---------- vehicle service dashboard ---------- */
+.svc-table td { vertical-align: middle; }
+.svc-table th.sticky-col, .svc-table td.sticky-col { position: sticky; left: 0; z-index: 1; background: var(--surface); min-width: 160px; }
+.svc-table th.sticky-col { background: var(--surface-2); z-index: 2; }
+.svc-OVERDUE td.sticky-col { box-shadow: inset 3px 0 0 var(--red); }
+.svc-DUE_SOON td.sticky-col { box-shadow: inset 3px 0 0 var(--amber); }
+.svc-OK td.sticky-col { box-shadow: inset 3px 0 0 var(--green); }
+.svc-km { min-width: 180px; }
+.svc-bar { height: 5px; background: var(--grey-bg); border-radius: 3px; margin-top: 4px; overflow: hidden; }
+.svc-bar span { display: block; height: 100%; background: var(--green); }
+.svc-DUE_SOON .svc-bar span { background: var(--amber); }
+.svc-OVERDUE .svc-bar span { background: var(--red); }
+.svc-scan { min-width: 150px; border: 1px dashed transparent; }
+.svc-scan:hover { border-color: var(--border); }
+.svc-scan .link-btn { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+.upload-link { cursor: pointer; }
+.nowrap { white-space: nowrap; }

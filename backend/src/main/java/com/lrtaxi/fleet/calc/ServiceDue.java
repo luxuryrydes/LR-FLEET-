@@ -12,7 +12,8 @@ public final class ServiceDue {
     public enum Status { OVERDUE, DUE_SOON, MISSING_SERVICE_RECORD, MISSING_BASELINE, UNRELIABLE_BASELINE, OK }
 
     /**
-     * @param lastServiceDate      date of the latest interval-resetting service (null = none on record)
+     * @param lastServiceDate      date of the latest interval-resetting service (null = none on record, or an imported
+     *                             service whose date was not recorded: then only the km-based reminder applies)
      * @param lastServiceOdometer  odometer at that service (may be null)
      * @param explicitNextOdometer user-entered override of next service odometer (null = compute)
      * @param explicitNextDate     user-entered override of next service date (null = compute)
@@ -41,9 +42,12 @@ public final class ServiceDue {
             current = in.baseline().km().add(Calc.nz(in.gpsKmAfterBaseline())).setScale(Calc.DISTANCE_SCALE, Calc.ROUNDING);
         }
 
-        if (in.lastServiceDate() == null) {
+        if (in.lastServiceDate() == null && in.lastServiceOdometer() == null && in.explicitNextOdometer() == null) {
             reasons.add("No service record that resets the service interval");
             return new Result(Status.MISSING_SERVICE_RECORD, current, null, null, null, null, reasons);
+        }
+        if (in.lastServiceDate() == null) {
+            reasons.add("Last service date not recorded: km-based reminder only");
         }
 
         BigDecimal next = in.explicitNextOdometer();
@@ -55,7 +59,7 @@ public final class ServiceDue {
         }
 
         LocalDate nextDate = in.explicitNextDate();
-        if (nextDate == null && in.intervalMonths() > 0) {
+        if (nextDate == null && in.intervalMonths() > 0 && in.lastServiceDate() != null) {
             nextDate = in.lastServiceDate().plusMonths(in.intervalMonths());
         }
         Long daysRemaining = nextDate == null ? null : ChronoUnit.DAYS.between(in.today(), nextDate);
