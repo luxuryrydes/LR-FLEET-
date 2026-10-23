@@ -21,6 +21,9 @@ export function VehiclesPage() {
   const sel = useVehicleSelection();
   const deletedView = filters.status === "DELETED";
   const pick = (r: Row) => ({ id: r.id as number, registrationNumber: r.registrationNumber as string });
+  const empty = !deletedView && list.data?.total === 0;
+  const deletedCount = useQuery({ queryKey: ["vehicles", "deleted-count"], enabled: empty,
+    queryFn: () => api.get<Page<Row>>("/api/vehicles", { status: "DELETED", size: 1 }) });
 
   const exportAs = (format: string) =>
     download("/api/vehicles/export", { ...filtersToQuery({ ...filters, from: "", to: "" }, { q: extra.q }), format }, `vehicles.${format}`)
@@ -47,6 +50,13 @@ export function VehiclesPage() {
       {deletedView && <p className="muted small">Deleted vehicles are hidden everywhere else. Tick vehicles to restore them
         {can(user, "admin") ? ", or delete permanently those without any records" : ""}.</p>}
       <VehicleDeleteBar sel={sel} deletedView={deletedView} />
+      {empty && Number(deletedCount.data?.total) > 0 && (
+        <div className="alert alert-warning">
+          No vehicles match, but <strong>{number(deletedCount.data?.total, 0)} vehicles are deleted</strong>.{" "}
+          <button className="link-btn" onClick={() => setFilters({ ...filters, status: "DELETED" })}>Show deleted vehicles</button>
+          {" "}to restore them, or upload the vehicle master sheet again and keep "Restore them" ticked.
+        </div>
+      )}
       <DataTable
         loading={list.isLoading}
         rows={list.data?.items}

@@ -59,7 +59,7 @@ or drag a PDF/photo onto the Job card box. Load your register with *Import servi
 🗑 Delete column. Tick several vehicles and use *Delete selected*, or delete one with 🗑; a reason is required. Deleted vehicles
 disappear from every page, report, import and alert, but their history is kept. To undo, open Vehicles → Status: *Deleted*,
 tick them and click *Restore selected*. Admins can *Delete permanently* there, which works only for vehicles without any records.
-Re-importing the master sheet never brings a deleted vehicle back.
+Uploading the master sheet again lists deleted vehicles that are in it, and restores them unless you untick *Restore them*.
 
 **"Reading the file…" never finishes?** The import worker isn't running. The import screen now says so. Keep the
 *Import worker* window open locally, or deploy the worker on Render (see [DEPLOYMENT](docs/DEPLOYMENT.md)).

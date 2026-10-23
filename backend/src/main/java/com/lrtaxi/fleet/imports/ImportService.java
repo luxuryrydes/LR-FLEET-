@@ -370,6 +370,11 @@ public class ImportService {
     // ------------------------------------------------------------------ commit
 
     public Map<String, Object> commit(long id, String policy, String givenReason) {
+        return commit(id, policy, givenReason, true);
+    }
+
+    /** @param restoreDeleted vehicle master only: bring back deleted vehicles that are in the sheet */
+    public Map<String, Object> commit(long id, String policy, String givenReason, boolean restoreDeleted) {
         boolean replace = "REPLACE".equals(policy);
         // Updating vehicles from the master sheet is the normal case, not a correction: no reason needs typing.
         String reason = replace && (givenReason == null || givenReason.isBlank()) && "VEHICLE_MASTER".equals(lockFree(id))
@@ -386,7 +391,7 @@ public class ImportService {
             throw ApiException.badRequest("INVALID_POLICY", "Policy must be SKIP or REPLACE");
         }
         try {
-            tx.executeWithoutResult(status -> doCommit(id, replace, reason));
+            tx.executeWithoutResult(status -> doCommit(id, replace, reason, restoreDeleted));
         } catch (ApiException e) {
             throw e;
         } catch (RuntimeException e) {
@@ -400,7 +405,7 @@ public class ImportService {
         return get(id);
     }
 
-    private void doCommit(long id, boolean replace, String reason) {
+    private void doCommit(long id, boolean replace, String reason, boolean restoreDeleted) {
         Map<String, Object> b = lock(id);
         if (!"PARSED".equals(b.get("status"))) {
             throw ApiException.conflict("INVALID_STATE", "Only a parsed import can be committed (current: " + b.get("status") + ")");
@@ -416,12 +421,12 @@ public class ImportService {
         } else if ("DOCUMENTS".equals(b.get("import_type"))) {
             counts = documents.commit(id, replace, reason, (row, field, code, message, raw) -> rowError(id, row, field, code, message, raw));
         } else {
-            counts = master.commit(id, replace, reason, (row, field, code, message, raw) -> rowError(id, row, field, code, message, raw));
+            counts = master.commit(id, replace, reason, restoreDeleted, (row, field, code, message, raw) -> rowError(id, row, field, code, message, raw));
         }
         efficiency.recomputeAll(touched);
         // Master with "add new only": vehicles whose details changed in the sheet but were kept as they were.
-        jdbc.update("UPDATE import_batches SET existing_conflict_rows = :n WHERE id = :id",
-                Map.of("n", counts.length > 3 ? counts[3] : 0, "id", id));
+        jdbc.update("UPDATE import_batches SET existing_conflict_rows = :n, deleted_skipped_rows = :ds, restored_rows = :rs WHERE id = :id",
+                Map.of("n", counts.length > 3 ? counts[3] : 0, "ds", counts.length > 5 ? counts[4] : 0, "rs", counts.length > 5 ? counts[5] : 0, "id", id));
         jdbc.update("""
                 UPDATE import_batches SET status = 'COMMITTED', inserted_rows = :ins, replaced_rows = :rep, skipped_rows = :skip,
                     rejected_rows = (SELECT count(DISTINCT row_number) FROM import_row_errors WHERE batch_id = :id),

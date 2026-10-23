@@ -104,8 +104,11 @@ It shows the new vehicles, the vehicles that will be updated with the fields tha
 status…), the vehicles already up to date, and the vehicles in the app that are missing from the sheet (these are not changed).
 For managers the default is **Add new vehicles and update changed ones**, and no reason needs typing. With *Add new vehicles
 only*, changed vehicles are kept as they were and the summary shows how many changes were not applied
-(`existingConflictRows`), so changes are never skipped silently. Sold vehicles keep their sold status, and deleted vehicles
-are not brought back.
+(`existingConflictRows`), so changes are never skipped silently. Sold vehicles keep their sold status.
+
+**Deleted vehicles in the sheet** are listed separately on the confirm step. With *Restore them* ticked (the default) they
+come back and take the sheet's details (`restoredRows`). Unticked, they stay deleted and are counted (`deletedSkippedRows`).
+An empty Vehicle register says when vehicles are deleted and links to them.
 
 **Column mapping is remembered.** When a sheet has headers the app does not recognise, it reuses the columns chosen in the last
 successful import of the same type, wherever this file has a column with exactly that header. The mapping screen says which

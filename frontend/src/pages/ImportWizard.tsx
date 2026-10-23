@@ -297,13 +297,16 @@ function PreviewStep({ b, onDone }: { b: Row; onDone: () => void }) {
   const masterReview = useQuery({ queryKey: ["master-review", b.id], queryFn: () => api.get<Row>(`/api/imports/${b.id}/master-review`),
     enabled: b.importType === "VEHICLE_MASTER" });
   const reasonNeeded = policy === "REPLACE" && b.importType !== "VEHICLE_MASTER";
+  // Vehicle master: deleted vehicles that are in the sheet come back unless this is unticked.
+  const [restoreDeleted, setRestoreDeleted] = useState(true);
   const importable = Number(b.validRows) + Number(b.warningRows);
 
   const commit = async () => {
     setBusy(true);
     setError(null);
     try {
-      await api.post(`/api/imports/${b.id}/commit`, { policy, reason: policy === "REPLACE" ? reason : null });
+      await api.post(`/api/imports/${b.id}/commit`, { policy, reason: policy === "REPLACE" ? reason : null,
+        ...(b.importType === "VEHICLE_MASTER" ? { restoreDeleted } : {}) });
       qc.invalidateQueries({ queryKey: ["vehicles"] });
       qc.invalidateQueries({ queryKey: ["gps"] });
       qc.invalidateQueries({ queryKey: ["fuel"] });
@@ -377,7 +380,8 @@ function PreviewStep({ b, onDone }: { b: Row; onDone: () => void }) {
         {b.importType === "GPS_KM" && Number(b.excludedRows) > 0 && (
           <Notice kind="info">{number(b.excludedRows, 0)} rows belong to vehicles that are not driven by LR's own drivers (vendor, idle, workshop or govt driver) and will not be imported.</Notice>
         )}
-        {b.importType === "VEHICLE_MASTER" && <MasterReview r={masterReview.data} loading={masterReview.isLoading} update={policy === "REPLACE"} />}
+        {b.importType === "VEHICLE_MASTER" && <MasterReview r={masterReview.data} loading={masterReview.isLoading} update={policy === "REPLACE"}
+                                                                    restore={restoreDeleted} onRestore={setRestoreDeleted} />}
         {b.importType === "SERVICE" && (
           <p>{number(importable, 0)} services will be checked by the server and saved as routine services. Each one restarts the service
             interval, and a dated one with an odometer reading becomes the odometer baseline (GPS km after it are added). Services already
@@ -417,7 +421,8 @@ function PreviewStep({ b, onDone }: { b: Row; onDone: () => void }) {
 }
 
 /** Vehicle master confirm step: what the import will add and update, before anything is saved. */
-export function MasterReview({ r, loading, update }: { r?: Row; loading: boolean; update: boolean }) {
+export function MasterReview({ r, loading, update, restore = true, onRestore }: { r?: Row; loading: boolean; update: boolean;
+  restore?: boolean; onRestore?: (v: boolean) => void }) {
   if (loading) return <Spinner text="Comparing the sheet with the saved vehicles…" />;
   if (!r) return null;
   const updates = (r.updates ?? []) as Row[];
@@ -428,7 +433,21 @@ export function MasterReview({ r, loading, update }: { r?: Row; loading: boolean
         <div className="count-pill"><b>{number(r.newVehicles, 0)}</b>new vehicles to add</div>
         <div className="count-pill"><b>{number(r.updatedVehicles, 0)}</b>vehicles with changes</div>
         <div className="count-pill"><b>{number(r.unchangedVehicles, 0)}</b>already up to date</div>
+        {Number(r.deletedVehicles) > 0 && <div className="count-pill"><b>{number(r.deletedVehicles, 0)}</b>deleted in the app</div>}
       </div>
+      {Number(r.deletedVehicles) > 0 && (
+        <div className={`alert ${restore ? "alert-info" : "alert-warning"}`}>
+          <strong>{number(r.deletedVehicles, 0)} vehicles in this sheet were deleted in the app</strong>
+          {Number(r.deletedVehicles) === Number(r.newVehicles) + Number(r.updatedVehicles) + Number(r.unchangedVehicles) + Number(r.deletedVehicles)
+            ? " (that is every vehicle in the sheet, which is why the Vehicle register looks empty)." : "."}
+          <label className="check" style={{ marginTop: 6 }}>
+            <input type="checkbox" checked={restore} onChange={(e) => onRestore?.(e.target.checked)} />
+            Restore them and take the details from this sheet
+          </label>
+          {!restore && <div className="small">Unticked: they stay deleted (Vehicles → Status: Deleted).</div>}
+          <details><summary>Show the deleted vehicles</summary><p className="mono small">{((r.deleted ?? []) as string[]).join(", ")}</p></details>
+        </div>
+      )}
       {Number(r.updatedVehicles) > 0 && !update && (
         <Notice kind="warning">{number(r.updatedVehicles, 0)} vehicles have changes in this sheet that will <strong>not</strong> be saved with
           "Add new vehicles only". Choose "Add new vehicles and update changed ones" to apply them.</Notice>
@@ -461,12 +480,19 @@ function SummaryStep({ b }: { b: Row }) {
         {(b.importType === "DOCUMENTS"
           ? [["Rows in file", b.totalRows], ["Documents added", b.insertedRows], ["Dates corrected", b.replacedRows], ["Already up to date", b.skippedRows], ["Rejected rows", b.rejectedRows]]
           : b.importType === "VEHICLE_MASTER"
-          ? [["Rows in file", b.totalRows], ["Vehicles added", b.insertedRows], ["Vehicles updated", b.replacedRows], ["Already up to date", b.skippedRows], ["Rejected", b.rejectedRows]]
+          ? [["Rows in file", b.totalRows], ["Vehicles added", b.insertedRows], ["Vehicles updated", b.replacedRows],
+             ...(Number(b.restoredRows) > 0 ? [["Restored (were deleted)", b.restoredRows]] : []), ["Already up to date", b.skippedRows], ["Rejected", b.rejectedRows]]
           : b.importType === "SERVICE"
           ? [["Rows in file", b.totalRows], ["Services added", b.insertedRows], ["Already saved", b.skippedRows], ["No service on record", b.excludedRows], ["Rejected", b.rejectedRows]]
           : [["Rows in file", b.totalRows], ["Inserted", b.insertedRows], ["Replaced", b.replacedRows], ["Skipped", b.skippedRows], ["Rejected", b.rejectedRows]])
           .map(([l, v]) => <div className="count-pill" key={l as string}><b>{number(v as number, 0)}</b>{l}</div>)}
       </div>
+      {b.importType === "VEHICLE_MASTER" && Number(b.deletedSkippedRows) > 0 && (
+        <Notice kind="warning">
+          {number(b.deletedSkippedRows, 0)} vehicles in this sheet are deleted in the app and were left deleted. To bring them back, upload the
+          sheet again with "Restore them" ticked, or restore them under Vehicles → Status: Deleted.
+        </Notice>
+      )}
       {b.importType === "VEHICLE_MASTER" && Number(b.existingConflictRows) > 0 && (
         <Notice kind="warning">
           {number(b.existingConflictRows, 0)} vehicles have different details in this sheet (driver, department, status…) but were left unchanged

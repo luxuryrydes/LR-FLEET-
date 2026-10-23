@@ -29,7 +29,8 @@ public class ImportController {
         this.imports = imports;
     }
 
-    public record CommitRequest(String policy, @Size(max = 500) String reason) {
+    /** restoreDeleted (vehicle master): bring back deleted vehicles that are in the sheet; default true. */
+    public record CommitRequest(String policy, @Size(max = 500) String reason, Boolean restoreDeleted) {
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -80,7 +81,7 @@ public class ImportController {
     @PostMapping("/{id}/commit")
     @PreAuthorize(Roles.WRITE)
     public Map<String, Object> commit(@PathVariable long id, @RequestBody CommitRequest req) {
-        return imports.commit(id, req.policy() == null ? "SKIP" : req.policy(), req.reason());
+        return imports.commit(id, req.policy() == null ? "SKIP" : req.policy(), req.reason(), !Boolean.FALSE.equals(req.restoreDeleted()));
     }
 
     @PostMapping("/{id}/retry")

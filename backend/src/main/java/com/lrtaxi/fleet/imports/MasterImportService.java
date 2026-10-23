@@ -5,6 +5,7 @@ import com.lrtaxi.fleet.calc.MasterRules;
 import com.lrtaxi.fleet.calc.RegistrationNormalizer;
 import com.lrtaxi.fleet.common.ApiException;
 import com.lrtaxi.fleet.common.Rows;
+import com.lrtaxi.fleet.vehicle.VehicleDeleteService;
 import com.lrtaxi.fleet.vehicle.VehicleRequest;
 import com.lrtaxi.fleet.vehicle.VehicleService;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -27,7 +28,8 @@ import java.util.Objects;
  * Commits a VEHICLE_MASTER import (the company's vehicle / driver sheet). Status, operator type and GPS tracking are
  * decided by MasterRules. New vehicles are always added; existing vehicles whose details changed are updated with policy
  * REPLACE (the default for this import), and only counted as "changes not applied" with SKIP. Vehicles already marked
- * sold/disposed keep that status; deleted vehicles are never brought back.
+ * sold/disposed keep that status. Deleted vehicles that are in the sheet are restored (and updated) when the upload says
+ * so - the default on screen, where they are listed first - otherwise they stay deleted and are counted.
  */
 @Service
 public class MasterImportService {
@@ -40,12 +42,17 @@ public class MasterImportService {
     private final VehicleService vehicles;
     private final TransactionTemplate nested;
     private final TransactionTemplate dryRun;
+    private final VehicleDeleteService deletes;
 
-    /** kind: 0 = added, 1 = updated, 2 = unchanged / skipped, 3 = changed in the sheet but kept (policy SKIP). */
+    /**
+     * kind: 0 = added, 1 = updated, 2 = unchanged / skipped, 3 = changed in the sheet but kept (policy SKIP),
+     * 4 = deleted in the app and kept deleted, 5 = deleted in the app and restored from the sheet.
+     */
     record Outcome(int kind, String registration, List<String> changes) {
     }
 
-    public MasterImportService(NamedParameterJdbcTemplate jdbc, VehicleService vehicles, PlatformTransactionManager tm) {
+    public MasterImportService(NamedParameterJdbcTemplate jdbc, VehicleService vehicles, VehicleDeleteService deletes, PlatformTransactionManager tm) {
+        this.deletes = deletes;
         this.jdbc = jdbc;
         this.vehicles = vehicles;
         this.nested = new TransactionTemplate(tm);
@@ -62,7 +69,8 @@ public class MasterImportService {
         List<Map<String, Object>> rows = staged(batchId);
         List<Map<String, Object>> updates = new ArrayList<>();
         List<String> added = new ArrayList<>();
-        int[] counts = new int[4];
+        List<String> restored = new ArrayList<>();
+        int[] counts = new int[6];
         List<String> problems = new ArrayList<>();
         List<String> sheetRegs = new ArrayList<>();
         dryRun.executeWithoutResult(status -> {
@@ -70,10 +78,12 @@ public class MasterImportService {
                 JsonNode p = (JsonNode) r.get("parsed");
                 sheetRegs.add(RegistrationNormalizer.normalize(text(p, "registration")));
                 try {
-                    Outcome o = nested.execute(s -> apply(p, true, "review"));
+                    Outcome o = nested.execute(s -> apply(p, true, "review", true));
                     counts[o.kind()]++;
                     if (o.kind() == 0) {
                         added.add(o.registration());
+                    } else if (o.kind() == 5) {
+                        restored.add(o.registration());
                     } else if (o.kind() == 1) {
                         Map<String, Object> u = new LinkedHashMap<>();
                         u.put("registration", o.registration());
@@ -93,6 +103,8 @@ public class MasterImportService {
         out.put("newVehicles", counts[0]);
         out.put("updatedVehicles", counts[1]);
         out.put("unchangedVehicles", counts[2]);
+        out.put("deletedVehicles", counts[5]);
+        out.put("deleted", restored.size() > 500 ? restored.subList(0, 500) : restored);
         out.put("added", added.size() > 200 ? added.subList(0, 200) : added);
         out.put("updates", updates.size() > 500 ? updates.subList(0, 500) : updates);
         out.put("problems", problems);
@@ -107,16 +119,16 @@ public class MasterImportService {
                 Map.of("id", batchId), Rows::map);
     }
 
-    /** @return {inserted, updated, unchanged, changed in the sheet but kept (SKIP)} */
-    public int[] commit(long batchId, boolean replace, String reason, RowErrors errors) {
+    /** @return {inserted, updated, unchanged, changed but kept (SKIP), kept deleted, restored} */
+    public int[] commit(long batchId, boolean replace, String reason, boolean restoreDeleted, RowErrors errors) {
         List<Map<String, Object>> rows = staged(batchId);
-        int[] counts = new int[4];
+        int[] counts = new int[6];
         String why = "Vehicle master import #" + batchId + (reason == null || reason.isBlank() ? "" : ": " + reason);
         for (Map<String, Object> r : rows) {
             int row = ((Number) r.get("rowNumber")).intValue();
             JsonNode p = (JsonNode) r.get("parsed");
             try {
-                Outcome outcome = nested.execute(s -> apply(p, replace, why));
+                Outcome outcome = nested.execute(s -> apply(p, replace, why, restoreDeleted));
                 counts[outcome == null ? 2 : outcome.kind()]++;
             } catch (ApiException e) {
                 errors.add(row, null, e.code(), e.getMessage(), text(p, "registration"));
@@ -135,7 +147,7 @@ public class MasterImportService {
         return t.getMessage();
     }
 
-    private Outcome apply(JsonNode p, boolean replace, String why) {
+    private Outcome apply(JsonNode p, boolean replace, String why, boolean restoreDeleted) {
         String reg = RegistrationNormalizer.normalize(text(p, "registration"));
         if (reg.length() < 4) {
             throw ApiException.badRequest("INVALID_REGISTRATION", "Registration number is missing or too short");
@@ -177,8 +189,17 @@ public class MasterImportService {
         }
         long id = existing.get(0);
         Map<String, Object> v = vehicles.get(id);
+        boolean restoring = false;
         if ("DELETED".equals(v.get("status"))) {
-            return new Outcome(2, reg, List.of());      // deleted on purpose: the sheet never brings it back (restore it instead)
+            if (!restoreDeleted) {
+                return new Outcome(4, reg, List.of());
+            }
+            Map<String, Object> r = deletes.restore(List.of(id));
+            if (((Number) r.get("restored")).intValue() == 0) {
+                throw ApiException.conflict("CANNOT_RESTORE", reg + " is deleted and could not be restored: " + r.get("skipped"));
+            }
+            v = vehicles.get(id);
+            restoring = true;
         }
         boolean disposed = v.get("disposalType") != null;
         String status = disposed ? (String) v.get("status") : d.status();
@@ -195,14 +216,14 @@ public class MasterImportService {
         List<String> changes = changes(v, req);
         if (changes.isEmpty()) {
             disposeIfSold(id, soldDate, text(p, "soldTo"));
-            return new Outcome(2, reg, changes);
+            return new Outcome(restoring ? 5 : 2, reg, changes);
         }
-        if (!replace) {
+        if (!replace && !restoring) {
             return new Outcome(3, reg, changes);
         }
-        vehicles.update(id, req);
+        vehicles.update(id, req);                       // a restored vehicle always takes the sheet's current details
         disposeIfSold(id, soldDate, text(p, "soldTo"));
-        return new Outcome(1, reg, changes);
+        return new Outcome(restoring ? 5 : 1, reg, changes);
     }
 
     private void disposeIfSold(long id, LocalDate soldDate, String soldTo) {

@@ -39,9 +39,13 @@ class VehicleDeleteIT extends AbstractIT {
         assertThat(getJson("/api/vehicles?vehicle=DL1DE&status=DELETED", adminToken).get("total").asInt()).isEqualTo(2);
         assertThat(getJson("/api/service-status?vehicle=DL1DE", adminToken)).isEmpty();
         assertThat(getJson("/api/documents/matrix?q=DL1DE", adminToken).get("rows")).isEmpty();
-        // the registration can be used again, and a master sheet does not bring the deleted vehicle back
+        // a master upload lists deleted vehicles in the sheet; when told not to restore them they stay deleted and are counted
         long b = parsedBatch("VEHICLE_MASTER", "{}", new Object[][]{{2, null, null, master("DL1DE0002")}});
-        call(post("/api/imports/" + b + "/commit"), adminToken, Map.of("policy", "REPLACE", "reason", "refresh"), status().isOk());
+        JsonNode rv = getJson("/api/imports/" + b + "/master-review", adminToken);
+        assertThat(rv.get("deletedVehicles").asInt()).isEqualTo(1);
+        assertThat(rv.get("deleted").toString()).contains("DL1DE0002");
+        JsonNode kept = call(post("/api/imports/" + b + "/commit"), adminToken, Map.of("policy", "REPLACE", "restoreDeleted", false), status().isOk());
+        assertThat(kept.get("deletedSkippedRows").asInt()).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT status FROM vehicles WHERE id = ?", String.class, mistake)).isEqualTo("DELETED");
 
         // permanent delete: only the vehicle without records goes
@@ -50,6 +54,13 @@ class VehicleDeleteIT extends AbstractIT {
         assertThat(p.get("kept").toString()).contains("DL1DE0001").contains("gps daily km");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM vehicles WHERE id = ?", Integer.class, mistake)).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM gps_daily_km WHERE vehicle_id = ?", Integer.class, used)).isEqualTo(1);
+
+        // by default the master upload brings a deleted vehicle back, with the sheet's details
+        long back = parsedBatch("VEHICLE_MASTER", "{}", new Object[][]{{2, null, null, master("DL1DE0001")}});
+        JsonNode rb = call(post("/api/imports/" + back + "/commit"), adminToken, Map.of("policy", "REPLACE"), status().isOk());
+        assertThat(rb.get("restoredRows").asInt()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT status FROM vehicles WHERE id = ?", String.class, used)).isEqualTo("ACTIVE");
+        call(post("/api/vehicles/delete"), adminToken, Map.of("ids", java.util.List.of(used), "reason", "again"), status().isOk());
 
         // restore brings back the earlier status
         JsonNode r = call(post("/api/vehicles/restore"), adminToken, Map.of("ids", List.of(used)), status().isOk());
