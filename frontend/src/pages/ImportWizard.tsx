@@ -244,6 +244,9 @@ export function MappingStep({ b, onDone }: { b: Row; onDone: () => void }) {
         )}
       </div>
       <h3 style={{ fontSize: 14, margin: "16px 0 8px" }}>Column mapping</h3>
+      {((sheet.remembered?.[type] ?? []) as string[]).length > 0 && (
+        <Notice kind="info">Matched from your last import: {(sheet.remembered[type] as string[]).map((f) => FIELD_LABELS[f] ?? f).join(", ")}. Check them and change any that are wrong.</Notice>
+      )}
       <div className="form-grid">
         {fields.map((f) => (
           <Field key={f} label={FIELD_LABELS[f] ?? f} required={REQUIRED[type].includes(f)} error={missing.includes(f) ? "Required" : undefined}>
@@ -283,13 +286,17 @@ function PreviewStep({ b, onDone }: { b: Row; onDone: () => void }) {
   const qc = useQueryClient();
   const [view, setView] = useState<View>("");
   const [page, setPage] = useState(0);
-  const [policy, setPolicy] = useState<"SKIP" | "REPLACE">("SKIP");
+  // Vehicle master: updating changed vehicles is the normal case, so it is the default for managers.
+  const [policy, setPolicy] = useState<"SKIP" | "REPLACE">(b.importType === "VEHICLE_MASTER" && can(user, "manage") ? "REPLACE" : "SKIP");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const q = { status: view, page, size: 100 };
   const rows = useQuery({ queryKey: ["import-rows", b.id, q], queryFn: () => api.get<Page<Row>>(`/api/imports/${b.id}/rows`, q) });
   const review = useQuery({ queryKey: ["import-review", b.id], queryFn: () => api.get<Row>(`/api/imports/${b.id}/review`), enabled: b.importType === "GPS_KM" });
+  const masterReview = useQuery({ queryKey: ["master-review", b.id], queryFn: () => api.get<Row>(`/api/imports/${b.id}/master-review`),
+    enabled: b.importType === "VEHICLE_MASTER" });
+  const reasonNeeded = policy === "REPLACE" && b.importType !== "VEHICLE_MASTER";
   const importable = Number(b.validRows) + Number(b.warningRows);
 
   const commit = async () => {
@@ -297,6 +304,7 @@ function PreviewStep({ b, onDone }: { b: Row; onDone: () => void }) {
     setError(null);
     try {
       await api.post(`/api/imports/${b.id}/commit`, { policy, reason: policy === "REPLACE" ? reason : null });
+      qc.invalidateQueries({ queryKey: ["vehicles"] });
       qc.invalidateQueries({ queryKey: ["gps"] });
       qc.invalidateQueries({ queryKey: ["fuel"] });
       qc.invalidateQueries({ queryKey: ["doc-matrix"] });
@@ -369,9 +377,7 @@ function PreviewStep({ b, onDone }: { b: Row; onDone: () => void }) {
         {b.importType === "GPS_KM" && Number(b.excludedRows) > 0 && (
           <Notice kind="info">{number(b.excludedRows, 0)} rows belong to vehicles that are not driven by LR's own drivers (vendor, idle, workshop or govt driver) and will not be imported.</Notice>
         )}
-        {b.importType === "VEHICLE_MASTER" && (
-          <p>{number(importable, 0)} vehicles will be checked by the server. New registrations are added. Choose below whether vehicles already in the system are updated from the sheet. Vehicles marked sold keep their sold status.</p>
-        )}
+        {b.importType === "VEHICLE_MASTER" && <MasterReview r={masterReview.data} loading={masterReview.isLoading} update={policy === "REPLACE"} />}
         {b.importType === "SERVICE" && (
           <p>{number(importable, 0)} services will be checked by the server and saved as routine services. Each one restarts the service
             interval, and a dated one with an odometer reading becomes the odometer baseline (GPS km after it are added). Services already
@@ -384,28 +390,67 @@ function PreviewStep({ b, onDone }: { b: Row; onDone: () => void }) {
         <div className="form-grid">
           <Field label="When a record already exists with a different value">
             <select value={policy} onChange={(e) => setPolicy(e.target.value as "SKIP" | "REPLACE")} aria-label="Duplicate policy">
-              <option value="SKIP">{b.importType === "VEHICLE_MASTER" ? "Add new vehicles only (keep existing unchanged)"
+              <option value="SKIP">{b.importType === "VEHICLE_MASTER" ? "Add new vehicles only (leave changed vehicles as they are)"
                 : b.importType === "DOCUMENTS" ? "Add new and later end dates only" : "Keep existing record (skip)"}</option>
               {can(user, "manage") && b.importType !== "FUEL" && b.importType !== "SERVICE" && (
-                <option value="REPLACE">{b.importType === "VEHICLE_MASTER" ? "Add new and update existing vehicles from the sheet"
+                <option value="REPLACE">{b.importType === "VEHICLE_MASTER" ? "Add new vehicles and update changed ones (recommended)"
                   : b.importType === "DOCUMENTS" ? "Also correct saved dates that are later than the sheet" : "Replace existing record (keeps history)"}</option>
               )}
             </select>
           </Field>
           {policy === "REPLACE" && (
-            <Field label={b.importType === "VEHICLE_MASTER" ? "Reason for update" : "Reason for replacement"} required error={!reason.trim() ? "Required for an audited correction" : undefined}>
+            <Field label={b.importType === "VEHICLE_MASTER" ? "Note for the change history (optional)" : "Reason for replacement"} required={reasonNeeded}
+                   error={reasonNeeded && !reason.trim() ? "Required for an audited correction" : undefined}>
               <input value={reason} onChange={(e) => setReason(e.target.value)} />
             </Field>
           )}
         </div>
         <div className="form-actions">
           <button className="btn" onClick={() => api.post(`/api/imports/${b.id}/cancel`).then(onDone)}>Cancel import</button>
-          <button className="btn btn-primary" disabled={busy || importable + Number(b.duplicateRows) === 0 || (policy === "REPLACE" && !reason.trim())} onClick={commit}>
+          <button className="btn btn-primary" disabled={busy || importable + Number(b.duplicateRows) === 0 || (reasonNeeded && !reason.trim())} onClick={commit}>
             {busy ? "Importing…" : "Confirm import"}
           </button>
         </div>
       </Card>
     </>
+  );
+}
+
+/** Vehicle master confirm step: what the import will add and update, before anything is saved. */
+export function MasterReview({ r, loading, update }: { r?: Row; loading: boolean; update: boolean }) {
+  if (loading) return <Spinner text="Comparing the sheet with the saved vehicles…" />;
+  if (!r) return null;
+  const updates = (r.updates ?? []) as Row[];
+  const notInSheet = (r.notInSheet ?? []) as string[];
+  return (
+    <div className="master-review">
+      <div className="counts">
+        <div className="count-pill"><b>{number(r.newVehicles, 0)}</b>new vehicles to add</div>
+        <div className="count-pill"><b>{number(r.updatedVehicles, 0)}</b>vehicles with changes</div>
+        <div className="count-pill"><b>{number(r.unchangedVehicles, 0)}</b>already up to date</div>
+      </div>
+      {Number(r.updatedVehicles) > 0 && !update && (
+        <Notice kind="warning">{number(r.updatedVehicles, 0)} vehicles have changes in this sheet that will <strong>not</strong> be saved with
+          "Add new vehicles only". Choose "Add new vehicles and update changed ones" to apply them.</Notice>
+      )}
+      {updates.length > 0 && (
+        <details open={updates.length <= 30}>
+          <summary>{update ? "Will be updated" : "Changed in the sheet"} ({updates.length})</summary>
+          <ul className="change-list">
+            {updates.map((u) => <li key={u.registration}><strong className="mono">{u.registration}</strong>: {(u.changes as string[]).join(", ")}</li>)}
+          </ul>
+        </details>
+      )}
+      {((r.added ?? []) as string[]).length > 0 && (
+        <details><summary>New vehicles ({r.newVehicles})</summary><p className="mono small">{(r.added as string[]).join(", ")}</p></details>
+      )}
+      {notInSheet.length > 0 && (
+        <details><summary>In the app but not in this sheet ({notInSheet.length})</summary>
+          <p className="muted small">These are not changed. If they left the fleet, mark them sold or delete them under Vehicles.</p>
+          <p className="mono small">{notInSheet.join(", ")}</p></details>
+      )}
+      <p className="muted small">Vehicles marked sold keep their sold status, and deleted vehicles are not brought back.</p>
+    </div>
   );
 }
 
@@ -415,11 +460,19 @@ function SummaryStep({ b }: { b: Row }) {
       <div className="counts">
         {(b.importType === "DOCUMENTS"
           ? [["Rows in file", b.totalRows], ["Documents added", b.insertedRows], ["Dates corrected", b.replacedRows], ["Already up to date", b.skippedRows], ["Rejected rows", b.rejectedRows]]
+          : b.importType === "VEHICLE_MASTER"
+          ? [["Rows in file", b.totalRows], ["Vehicles added", b.insertedRows], ["Vehicles updated", b.replacedRows], ["Already up to date", b.skippedRows], ["Rejected", b.rejectedRows]]
           : b.importType === "SERVICE"
           ? [["Rows in file", b.totalRows], ["Services added", b.insertedRows], ["Already saved", b.skippedRows], ["No service on record", b.excludedRows], ["Rejected", b.rejectedRows]]
           : [["Rows in file", b.totalRows], ["Inserted", b.insertedRows], ["Replaced", b.replacedRows], ["Skipped", b.skippedRows], ["Rejected", b.rejectedRows]])
           .map(([l, v]) => <div className="count-pill" key={l as string}><b>{number(v as number, 0)}</b>{l}</div>)}
       </div>
+      {b.importType === "VEHICLE_MASTER" && Number(b.existingConflictRows) > 0 && (
+        <Notice kind="warning">
+          {number(b.existingConflictRows, 0)} vehicles have different details in this sheet (driver, department, status…) but were left unchanged
+          because "Add new vehicles only" was chosen. Import the sheet again and keep "Add new vehicles and update changed ones".
+        </Notice>
+      )}
       <dl className="kv">
         <dt>Status</dt><dd><Badge value={b.status} /></dd>
         <dt>Duplicate policy</dt><dd>{label(b.duplicatePolicy)}{b.replaceReason && ` — ${b.replaceReason}`}</dd>

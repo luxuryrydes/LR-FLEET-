@@ -16,6 +16,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -23,8 +25,9 @@ import java.util.Objects;
 
 /**
  * Commits a VEHICLE_MASTER import (the company's vehicle / driver sheet). Status, operator type and GPS tracking are
- * decided by MasterRules. New vehicles are always added; existing vehicles are updated only with policy REPLACE.
- * Vehicles already marked sold/disposed keep that status.
+ * decided by MasterRules. New vehicles are always added; existing vehicles whose details changed are updated with policy
+ * REPLACE (the default for this import), and only counted as "changes not applied" with SKIP. Vehicles already marked
+ * sold/disposed keep that status; deleted vehicles are never brought back.
  */
 @Service
 public class MasterImportService {
@@ -36,28 +39,85 @@ public class MasterImportService {
     private final NamedParameterJdbcTemplate jdbc;
     private final VehicleService vehicles;
     private final TransactionTemplate nested;
+    private final TransactionTemplate dryRun;
+
+    /** kind: 0 = added, 1 = updated, 2 = unchanged / skipped, 3 = changed in the sheet but kept (policy SKIP). */
+    record Outcome(int kind, String registration, List<String> changes) {
+    }
 
     public MasterImportService(NamedParameterJdbcTemplate jdbc, VehicleService vehicles, PlatformTransactionManager tm) {
         this.jdbc = jdbc;
         this.vehicles = vehicles;
         this.nested = new TransactionTemplate(tm);
         this.nested.setPropagationBehavior(TransactionDefinition.PROPAGATION_NESTED);
+        this.dryRun = new TransactionTemplate(tm);
+        this.dryRun.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    /** @return {inserted, updated, unchanged} */
-    public int[] commit(long batchId, boolean replace, String reason, RowErrors errors) {
-        List<Map<String, Object>> rows = jdbc.query("""
+    /**
+     * What a commit with updates would do, without saving anything (the whole run is rolled back): new vehicles,
+     * vehicles that will be updated with the fields that change, unchanged ones, and vehicles in the app missing from the sheet.
+     */
+    public Map<String, Object> review(long batchId) {
+        List<Map<String, Object>> rows = staged(batchId);
+        List<Map<String, Object>> updates = new ArrayList<>();
+        List<String> added = new ArrayList<>();
+        int[] counts = new int[4];
+        List<String> problems = new ArrayList<>();
+        List<String> sheetRegs = new ArrayList<>();
+        dryRun.executeWithoutResult(status -> {
+            for (Map<String, Object> r : rows) {
+                JsonNode p = (JsonNode) r.get("parsed");
+                sheetRegs.add(RegistrationNormalizer.normalize(text(p, "registration")));
+                try {
+                    Outcome o = nested.execute(s -> apply(p, true, "review"));
+                    counts[o.kind()]++;
+                    if (o.kind() == 0) {
+                        added.add(o.registration());
+                    } else if (o.kind() == 1) {
+                        Map<String, Object> u = new LinkedHashMap<>();
+                        u.put("registration", o.registration());
+                        u.put("changes", o.changes());
+                        updates.add(u);
+                    }
+                } catch (RuntimeException e) {
+                    problems.add(text(p, "registration") + ": " + e.getMessage());
+                }
+            }
+            status.setRollbackOnly();
+        });
+        List<String> notInSheet = sheetRegs.isEmpty() ? List.of() : jdbc.queryForList("""
+                SELECT registration_number FROM vehicles WHERE status NOT IN ('SOLD', 'SCRAPPED', 'DELETED')
+                  AND registration_normalized NOT IN (:regs) ORDER BY registration_normalized""", Map.of("regs", sheetRegs), String.class);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("newVehicles", counts[0]);
+        out.put("updatedVehicles", counts[1]);
+        out.put("unchangedVehicles", counts[2]);
+        out.put("added", added.size() > 200 ? added.subList(0, 200) : added);
+        out.put("updates", updates.size() > 500 ? updates.subList(0, 500) : updates);
+        out.put("problems", problems);
+        out.put("notInSheet", notInSheet);
+        return out;
+    }
+
+    private List<Map<String, Object>> staged(long batchId) {
+        return jdbc.query("""
                 SELECT row_number, parsed FROM import_staging_rows
                 WHERE batch_id = :id AND status NOT IN ('REJECTED', 'EXCLUDED') AND parsed IS NOT NULL ORDER BY row_number""",
                 Map.of("id", batchId), Rows::map);
-        int[] counts = new int[3];
+    }
+
+    /** @return {inserted, updated, unchanged, changed in the sheet but kept (SKIP)} */
+    public int[] commit(long batchId, boolean replace, String reason, RowErrors errors) {
+        List<Map<String, Object>> rows = staged(batchId);
+        int[] counts = new int[4];
         String why = "Vehicle master import #" + batchId + (reason == null || reason.isBlank() ? "" : ": " + reason);
         for (Map<String, Object> r : rows) {
             int row = ((Number) r.get("rowNumber")).intValue();
             JsonNode p = (JsonNode) r.get("parsed");
             try {
-                Integer outcome = nested.execute(s -> apply(p, replace, why));
-                counts[outcome == null ? 2 : outcome]++;
+                Outcome outcome = nested.execute(s -> apply(p, replace, why));
+                counts[outcome == null ? 2 : outcome.kind()]++;
             } catch (ApiException e) {
                 errors.add(row, null, e.code(), e.getMessage(), text(p, "registration"));
             } catch (IllegalArgumentException | org.springframework.dao.DataAccessException e) {
@@ -75,8 +135,7 @@ public class MasterImportService {
         return t.getMessage();
     }
 
-    /** 0 = inserted, 1 = updated, 2 = unchanged/skipped. */
-    private int apply(JsonNode p, boolean replace, String why) {
+    private Outcome apply(JsonNode p, boolean replace, String why) {
         String reg = RegistrationNormalizer.normalize(text(p, "registration"));
         if (reg.length() < 4) {
             throw ApiException.badRequest("INVALID_REGISTRATION", "Registration number is missing or too short");
@@ -114,17 +173,14 @@ public class MasterImportService {
                     text(p, "gpsDeviceName"), text(p, "remarks"), null, null, null, why, d.operatorType().name(), d.gpsKmTracked(), regClass,
                     trim(label, 60)));
             disposeIfSold(id, soldDate, text(p, "soldTo"));
-            return 0;
+            return new Outcome(0, reg, List.of());
         }
         long id = existing.get(0);
         Map<String, Object> v = vehicles.get(id);
         if ("DELETED".equals(v.get("status"))) {
-            return 2;                                   // deleted on purpose: the sheet never brings it back (restore it instead)
+            return new Outcome(2, reg, List.of());      // deleted on purpose: the sheet never brings it back (restore it instead)
         }
         boolean disposed = v.get("disposalType") != null;
-        if (!replace) {
-            return 2;
-        }
         String status = disposed ? (String) v.get("status") : d.status();
         boolean tracked = !disposed && d.gpsKmTracked();
         VehicleRequest req = new VehicleRequest(reg, null, make, mi.model(), year != null ? year : (v.get("modelYear") == null ? null : Integer.valueOf(((Number) v.get("modelYear")).intValue())), fuel, category,
@@ -136,13 +192,17 @@ public class MasterImportService {
                 firstNonBlank(text(p, "gpsDeviceName"), (String) v.get("gpsDeviceName")),
                 firstNonBlank(text(p, "remarks"), (String) v.get("remarks")), null, null, null, why, d.operatorType().name(), tracked,
                 regClass != null ? regClass : (String) v.get("registrationClass"), trim(label, 60));
-        if (same(v, req)) {
+        List<String> changes = changes(v, req);
+        if (changes.isEmpty()) {
             disposeIfSold(id, soldDate, text(p, "soldTo"));
-            return 2;
+            return new Outcome(2, reg, changes);
+        }
+        if (!replace) {
+            return new Outcome(3, reg, changes);
         }
         vehicles.update(id, req);
         disposeIfSold(id, soldDate, text(p, "soldTo"));
-        return 1;
+        return new Outcome(1, reg, changes);
     }
 
     private void disposeIfSold(long id, LocalDate soldDate, String soldTo) {
@@ -156,14 +216,30 @@ public class MasterImportService {
         }
     }
 
-    private static boolean same(Map<String, Object> v, VehicleRequest r) {
-        return Objects.equals(v.get("make"), r.make()) && Objects.equals(v.get("model"), r.model())
-                && Objects.equals(num(v.get("modelYear")), num(r.modelYear())) && Objects.equals(v.get("fuelType"), r.fuelType())
-                && Objects.equals(v.get("categoryCode"), r.categoryCode()) && Objects.equals(v.get("ownershipType"), r.ownershipType())
-                && Objects.equals(num(v.get("vendorId")), num(r.vendorId())) && Objects.equals(num(v.get("currentDriverId")), num(r.currentDriverId()))
-                && Objects.equals(num(v.get("currentDepartmentId")), num(r.currentDepartmentId())) && Objects.equals(v.get("status"), r.status())
-                && Objects.equals(v.get("operatorType"), r.operatorType()) && Objects.equals(v.get("gpsKmTracked"), r.gpsKmTracked())
-                && Objects.equals(v.get("registrationClass"), r.registrationClass()) && Objects.equals(v.get("assignmentLabel"), r.assignmentLabel());
+    /** Which details differ between the saved vehicle and the sheet (empty = nothing to update). */
+    static List<String> changes(Map<String, Object> v, VehicleRequest r) {
+        List<String> c = new ArrayList<>();
+        diff(c, "make", v.get("make"), r.make());
+        diff(c, "model", v.get("model"), r.model());
+        diff(c, "model year", num(v.get("modelYear")), num(r.modelYear()));
+        diff(c, "fuel", v.get("fuelType"), r.fuelType());
+        diff(c, "category", v.get("categoryCode"), r.categoryCode());
+        diff(c, "ownership", v.get("ownershipType"), r.ownershipType());
+        diff(c, "vendor", num(v.get("vendorId")), num(r.vendorId()));
+        diff(c, "driver", num(v.get("currentDriverId")), num(r.currentDriverId()));
+        diff(c, "department", num(v.get("currentDepartmentId")), num(r.currentDepartmentId()));
+        diff(c, "status", v.get("status"), r.status());
+        diff(c, "driver type", v.get("operatorType"), r.operatorType());
+        diff(c, "GPS km tracking", v.get("gpsKmTracked"), r.gpsKmTracked());
+        diff(c, "commercial / private", v.get("registrationClass"), r.registrationClass());
+        diff(c, "Vendor / Driver label", v.get("assignmentLabel"), r.assignmentLabel());
+        return c;
+    }
+
+    private static void diff(List<String> out, String label, Object a, Object b) {
+        if (!Objects.equals(a, b)) {
+            out.add(label);
+        }
     }
 
     private static Integer intOrNull(Object o) {

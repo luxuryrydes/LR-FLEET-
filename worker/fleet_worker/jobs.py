@@ -163,11 +163,38 @@ def detect_headers(conn: psycopg.Connection, storage: Storage, batch_id: int) ->
     info = _with_file(storage, b, describe_file)
     if not info["sheets"] or all(not s["headers"] for s in info["sheets"]):
         raise PermanentError("The file has no readable rows")
+    remember_mapping(info, previous_mappings(conn, b["import_type"], batch_id), b["import_type"])
     with conn.cursor() as cur:
         cur.execute("UPDATE import_batches SET sheet_info = %s, status = 'HEADERS_READY', updated_at = now() WHERE id = %s",
                     (Jsonb(info), batch_id))
     conn.commit()
     return {"batchId": batch_id, "sheets": len(info["sheets"])}
+
+
+def previous_mappings(conn: psycopg.Connection, import_type: str, batch_id: int) -> list[dict]:
+    """Column choices of the last committed imports of this type, newest first."""
+    with conn.cursor() as cur:
+        cur.execute("""SELECT column_mapping FROM import_batches WHERE import_type = %s AND status = 'COMMITTED' AND id <> %s
+                       AND column_mapping IS NOT NULL ORDER BY committed_at DESC NULLS LAST, id DESC LIMIT 5""", (import_type, batch_id))
+        return [r["column_mapping"] for r in cur.fetchall() if r["column_mapping"]]
+
+
+def remember_mapping(info: dict, previous: list[dict], import_type: str) -> None:
+    """Fills fields the header synonyms could not match with the column the user chose last time, when this file has a
+    column with exactly that header. So a sheet in the company's own format maps itself after it was mapped once."""
+    for sheet in info["sheets"]:
+        headers = set(sheet["headers"])
+        suggested = sheet["suggestedMapping"].setdefault(import_type, {})
+        used = set(suggested.values())
+        remembered = []
+        for mapping in previous:
+            for field, header in mapping.items():
+                if field not in suggested and header in headers and header not in used:
+                    suggested[field] = header
+                    used.add(header)
+                    remembered.append(field)
+        if remembered:
+            sheet.setdefault("remembered", {})[import_type] = remembered
 
 
 def load_vehicle_index(conn: psycopg.Connection) -> VehicleIndex:

@@ -293,6 +293,18 @@ public class ImportService {
      * Dry run of the GPS commit rules against current data: what would be inserted, skipped as identical, kept as existing
      * conflict (SKIP) or replaced (REPLACE). Nothing is written.
      */
+    private String lockFree(long id) {
+        List<String> t = jdbc.queryForList("SELECT import_type FROM import_batches WHERE id = :id", Map.of("id", id), String.class);
+        return t.isEmpty() ? null : t.get(0);
+    }
+
+    public Map<String, Object> reviewMaster(long id) {
+        if (!"VEHICLE_MASTER".equals(lockFree(id))) {
+            throw ApiException.badRequest("NOT_MASTER", "Only a vehicle master import has this review");
+        }
+        return master.review(id);
+    }
+
     public Map<String, Object> reviewGps(long id) {
         Map<String, Object> b = get(id);
         requireType(b, "GPS_KM");
@@ -357,8 +369,11 @@ public class ImportService {
 
     // ------------------------------------------------------------------ commit
 
-    public Map<String, Object> commit(long id, String policy, String reason) {
+    public Map<String, Object> commit(long id, String policy, String givenReason) {
         boolean replace = "REPLACE".equals(policy);
+        // Updating vehicles from the master sheet is the normal case, not a correction: no reason needs typing.
+        String reason = replace && (givenReason == null || givenReason.isBlank()) && "VEHICLE_MASTER".equals(lockFree(id))
+                ? "Vehicle master update" : givenReason;
         if (replace) {
             CurrentUser u = CurrentUser.require();
             if (!u.canManage()) {
@@ -404,6 +419,9 @@ public class ImportService {
             counts = master.commit(id, replace, reason, (row, field, code, message, raw) -> rowError(id, row, field, code, message, raw));
         }
         efficiency.recomputeAll(touched);
+        // Master with "add new only": vehicles whose details changed in the sheet but were kept as they were.
+        jdbc.update("UPDATE import_batches SET existing_conflict_rows = :n WHERE id = :id",
+                Map.of("n", counts.length > 3 ? counts[3] : 0, "id", id));
         jdbc.update("""
                 UPDATE import_batches SET status = 'COMMITTED', inserted_rows = :ins, replaced_rows = :rep, skipped_rows = :skip,
                     rejected_rows = (SELECT count(DISTINCT row_number) FROM import_row_errors WHERE batch_id = :id),

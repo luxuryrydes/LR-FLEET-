@@ -82,6 +82,7 @@ Status codes: 400 validation, 401 not signed in, 403 role, 404 not found, 409 co
 | POST | /api/imports/{id}/mapping | WRITE | `{sheet, headerRow, mapping:{field: header}, options:{recordMode}}` |
 | GET | /api/imports/{id}/rows | READ | Staging rows, `status=VALID\|WARNING\|DUPLICATE\|REJECTED` |
 | GET | /api/imports/{id}/review | READ | GPS dry run: new, identical and conflicting vehicle-days |
+| GET | /api/imports/{id}/master-review | READ | Vehicle master dry run: `{newVehicles, updatedVehicles, unchangedVehicles, updates[{registration, changes[]}], added[], notInSheet[], problems[]}` |
 | POST | /api/imports/{id}/commit | WRITE | `{policy: SKIP\|REPLACE, reason?}`. REPLACE needs MANAGE and a reason. |
 | POST | /api/imports/{id}/retry, /cancel | WRITE | |
 | GET | /api/imports/{id}/errors?format=xlsx\|csv | READ | Row-level error report |

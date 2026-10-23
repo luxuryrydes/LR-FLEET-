@@ -97,6 +97,20 @@ Optional columns: Make, Category, Chassis No, Engine No, GPS Device Name, Sold D
 The status, driver type and GPS-km rules are in [CALCULATION_RULES.md §13](CALCULATION_RULES.md). The preview shows, for every
 row, whether the vehicle is new or an update, what its status will be, and whether its GPS km will be imported.
 
+### Updating vehicles from a new master sheet
+
+The confirm step compares the sheet with the saved vehicles before anything is saved (`GET /api/imports/{id}/master-review`).
+It shows the new vehicles, the vehicles that will be updated with the fields that change (driver, department, driver type,
+status…), the vehicles already up to date, and the vehicles in the app that are missing from the sheet (these are not changed).
+For managers the default is **Add new vehicles and update changed ones**, and no reason needs typing. With *Add new vehicles
+only*, changed vehicles are kept as they were and the summary shows how many changes were not applied
+(`existingConflictRows`), so changes are never skipped silently. Sold vehicles keep their sold status, and deleted vehicles
+are not brought back.
+
+**Column mapping is remembered.** When a sheet has headers the app does not recognise, it reuses the columns chosen in the last
+successful import of the same type, wherever this file has a column with exactly that header. The mapping screen says which
+fields were matched this way.
+
 ## Vehicle documents register (permit / pollution / insurance sheet)
 
 Import type `DOCUMENTS`: one row per vehicle with an end-date column per document. Built for the company's

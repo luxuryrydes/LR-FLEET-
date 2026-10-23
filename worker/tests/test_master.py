@@ -93,3 +93,15 @@ def test_gps_km_excluded_for_vehicles_not_driven_by_own_drivers():
     assert [r.status for r in res.rows] == ["VALID", "EXCLUDED"]
     assert "NOT_OWN_DRIVER" in [m["code"] for m in res.rows[1].messages]
     assert res.counts()["EXCLUDED"] == 1
+
+
+def test_unknown_headers_use_the_columns_chosen_last_time():
+    from fleet_worker.jobs import remember_mapping
+    headers = ["Sr", "Gaadi Number", "Model", "Fuel", "Chalak"]
+    info = {"sheets": [{"name": "Sheet1", "headers": headers,
+                        "suggestedMapping": {"VEHICLE_MASTER": suggest_mapping(headers, "VEHICLE_MASTER")}}]}
+    assert "registration" not in info["sheets"][0]["suggestedMapping"]["VEHICLE_MASTER"]
+    remember_mapping(info, [{"registration": "Gaadi Number", "driverName": "Chalak", "department": "Not in this file"}], "VEHICLE_MASTER")
+    m = info["sheets"][0]["suggestedMapping"]["VEHICLE_MASTER"]
+    assert m["registration"] == "Gaadi Number" and m["driverName"] == "Chalak" and "department" not in m
+    assert info["sheets"][0]["remembered"]["VEHICLE_MASTER"] == ["registration", "driverName"]

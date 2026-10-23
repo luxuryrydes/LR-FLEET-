@@ -64,6 +64,10 @@ Re-importing the master sheet never brings a deleted vehicle back.
 **"Reading the file…" never finishes?** The import worker isn't running. The import screen now says so. Keep the
 *Import worker* window open locally, or deploy the worker on Render (see [DEPLOYMENT](docs/DEPLOYMENT.md)).
 
+**Updating the master:** upload the new sheet the same way. The confirm step lists every vehicle that will change and which
+details change. Keep *Add new vehicles and update changed ones* (the default), and the summary shows Added / Updated / Already
+up to date.
+
 **Load your fleet:** Vehicles → *Upload vehicle master sheet* → choose the master Excel (e.g. `NEW MASTER.xlsx`) → Validate → Confirm.
 Workshop vehicles become *Workshop*, vehicles without a driver become *Idle*, and only vehicles driven by your own drivers have
 their GPS km imported. Sold vehicles: open the vehicle → *Mark as sold / disposed*.

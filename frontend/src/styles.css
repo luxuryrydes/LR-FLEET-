@@ -254,3 +254,7 @@ th.check-col, td.check-col { width: 34px; text-align: center !important; padding
 .icon-btn { border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 2px 6px; cursor: pointer; font-size: 14px; }
 .icon-btn.danger:hover { border-color: var(--red); background: var(--red-bg); }
 tr.row-picked td { background: #fff7f7; }
+.master-review details { margin: 8px 0; }
+.master-review summary { cursor: pointer; font-weight: 600; }
+.change-list { margin: 6px 0 0 18px; padding: 0; max-height: 320px; overflow: auto; }
+.change-list li { margin: 2px 0; }

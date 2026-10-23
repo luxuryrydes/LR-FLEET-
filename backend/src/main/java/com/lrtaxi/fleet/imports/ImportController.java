@@ -64,6 +64,13 @@ public class ImportController {
         return imports.staging(id, status, page, size);
     }
 
+    /** Vehicle master dry run: new / updated (with changed fields) / unchanged vehicles. Saves nothing. */
+    @GetMapping("/{id}/master-review")
+    @PreAuthorize(Roles.READ)
+    public Map<String, Object> masterReview(@PathVariable long id) {
+        return imports.reviewMaster(id);
+    }
+
     @GetMapping("/{id}/review")
     @PreAuthorize(Roles.READ)
     public Map<String, Object> review(@PathVariable long id) {
