@@ -31,7 +31,7 @@ public class VehicleService {
                    v.purchase_date, v.purchase_cost, v.chassis_number, v.engine_number, v.gps_device_name, v.remarks,
                    v.operator_type, v.assignment_label, v.gps_km_tracked, v.registration_class,
                    v.disposal_type, v.disposal_date, v.disposal_party, v.disposal_amount, v.disposal_remarks,
-                   v.deactivated_at, v.created_at, v.updated_at
+                   v.deactivated_at, v.deleted_at, v.delete_reason, v.status_before_delete, v.created_at, v.updated_at
             FROM vehicles v
             LEFT JOIN vendors vd ON vd.id = v.vendor_id
             LEFT JOIN drivers dr ON dr.id = v.current_driver_id
@@ -340,7 +340,7 @@ public class VehicleService {
             return;   // documented exception
         }
         MapSqlParameterSource p = new MapSqlParameterSource("n", norm).addValue("self", selfId == null ? -1L : selfId);
-        Long n = jdbc.queryForObject("SELECT count(*) FROM vehicles WHERE registration_normalized = :n AND id <> :self AND duplicate_registration_reason IS NULL", p, Long.class);
+        Long n = jdbc.queryForObject("SELECT count(*) FROM vehicles WHERE registration_normalized = :n AND id <> :self AND duplicate_registration_reason IS NULL AND status <> 'DELETED'", p, Long.class);
         if (n != null && n > 0) {
             throw ApiException.conflict("DUPLICATE_REGISTRATION", "Registration " + norm + " already exists. Record a documented reason to allow a duplicate.");
         }

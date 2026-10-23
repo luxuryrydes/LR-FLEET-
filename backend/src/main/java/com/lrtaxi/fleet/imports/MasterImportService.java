@@ -118,6 +118,9 @@ public class MasterImportService {
         }
         long id = existing.get(0);
         Map<String, Object> v = vehicles.get(id);
+        if ("DELETED".equals(v.get("status"))) {
+            return 2;                                   // deleted on purpose: the sheet never brings it back (restore it instead)
+        }
         boolean disposed = v.get("disposalType") != null;
         if (!replace) {
             return 2;

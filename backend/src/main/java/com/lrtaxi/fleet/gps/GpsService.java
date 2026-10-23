@@ -139,6 +139,9 @@ public class GpsService {
     /** Manual entry when GPS data is unavailable, or a correction of an existing day (requires a reason). */
     @Transactional
     public Map<String, Object> manual(long vehicleId, LocalDate date, BigDecimal km, String notes, String correctionReason) {
+        if (Boolean.TRUE.equals(jdbc.queryForObject("SELECT status = 'DELETED' FROM vehicles WHERE id = :v", Map.of("v", vehicleId), Boolean.class))) {
+            throw ApiException.badRequest("VEHICLE_DELETED", "This vehicle is deleted. Restore it under Vehicles to record km.");
+        }
         if (date.isAfter(LocalDate.now())) {
             throw ApiException.badRequest("FUTURE_DATE", "Date cannot be in the future");
         }

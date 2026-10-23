@@ -85,6 +85,8 @@ public record FleetFilter(
         if (status != null && !status.isBlank()) {
             sql.append(" AND ").append(v).append(".status = :f_status");
             p.addValue("f_status", status);
+        } else {
+            sql.append(" AND ").append(v).append(".status <> 'DELETED'");   // deleted vehicles only show when asked for
         }
     }
 

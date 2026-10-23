@@ -197,7 +197,11 @@ describe("Monthly mileage calculator", () => {
       ],
     };
     const spy = vi.spyOn(api, "get").mockImplementation(async (path: string) => (path.endsWith("/trend") ? [] : month) as never);
-    wrap(<MonthlyMileagePage />);
+    wrap(
+      <authModule.AuthContext.Provider value={{ user: { id: 1, email: "u@x", fullName: "U", roles: ["VIEWER"] }, loading: false, login: vi.fn(), logout: vi.fn() }}>
+        <MonthlyMileagePage />
+      </authModule.AuthContext.Provider>,
+    );
     expect(await screen.findByText("₹4.00")).toBeInTheDocument();                  // fleet ₹/km
     expect(screen.getAllByText("23.33 km/kg")).toHaveLength(2);                  // fleet CNG card + vehicle row
     const table = screen.getByRole("table", { name: "Monthly mileage by vehicle" });
@@ -298,4 +302,43 @@ describe("Vehicle service portal", () => {
     expect(within(table).getByText("HR51CS9447")).toBeInTheDocument();
     spy.mockRestore();
   }, 30000);
+});
+
+
+describe("Deleting vehicles", () => {
+  const as = (roles: authModule.Role[], ui: ReactNode) => (
+    <authModule.AuthContext.Provider value={{ user: { id: 1, email: "u@x", fullName: "U", roles }, loading: false, login: vi.fn(), logout: vi.fn() }}>
+      {ui}
+    </authModule.AuthContext.Provider>
+  );
+
+  it("deletes several ticked vehicles with a reason, and hides the option from operators", async () => {
+    const { api } = await import("../lib/api");
+    const { SelectOne, VehicleDeleteBar, useVehicleSelection } = await import("../components/VehicleDelete");
+    const post = vi.spyOn(api, "post").mockResolvedValue({ deleted: 2, skipped: [] } as never);
+    function Harness() {
+      const sel = useVehicleSelection();
+      return <>
+        <SelectOne sel={sel} v={{ id: 1, registrationNumber: "DL1AA0001" }} />
+        <SelectOne sel={sel} v={{ id: 2, registrationNumber: "DL1AA0002" }} />
+        <VehicleDeleteBar sel={sel} />
+      </>;
+    }
+    const { unmount } = wrap(as(["MANAGER"], <Harness />));
+    await userEvent.click(screen.getByLabelText("Select DL1AA0001"));
+    await userEvent.click(screen.getByLabelText("Select DL1AA0002"));
+    expect(screen.getByText("2 vehicles selected")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Delete selected" }));
+    const confirm = screen.getByRole("button", { name: "Delete 2 vehicles" });
+    expect(confirm).toBeDisabled();                                       // a reason is required
+    await userEvent.type(screen.getByPlaceholderText(/added by mistake/), "Duplicate entries");
+    await userEvent.click(confirm);
+    expect(post).toHaveBeenCalledWith("/api/vehicles/delete", { ids: [1, 2], reason: "Duplicate entries" });
+    post.mockRestore();
+    unmount();
+
+    wrap(as(["OPERATOR"], <Harness />));
+    await userEvent.click(screen.getByLabelText("Select DL1AA0001"));
+    expect(screen.queryByRole("button", { name: "Delete selected" })).not.toBeInTheDocument();
+  });
 });

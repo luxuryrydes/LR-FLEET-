@@ -173,7 +173,7 @@ def detect_headers(conn: psycopg.Connection, storage: Storage, batch_id: int) ->
 def load_vehicle_index(conn: psycopg.Connection) -> VehicleIndex:
     with conn.cursor() as cur:
         cur.execute("""SELECT id, registration_normalized, fuel_type, gps_km_tracked FROM vehicles
-                       WHERE status NOT IN ('SOLD', 'SCRAPPED')""")
+                       WHERE status NOT IN ('SOLD', 'SCRAPPED', 'DELETED')""")
         by_reg: dict[str, int] = {}
         ambiguous: set[str] = set()
         fuel: dict[int, str] = {}

@@ -8,6 +8,7 @@ import { useLookups } from "../lib/hooks";
 import { date, number, rupees, todayIso } from "../lib/format";
 import { useUrlFilters } from "../lib/useUrlFilters";
 import { FilterBar } from "../components/FilterBar";
+import { DeleteVehicleButton, SelectAll, SelectOne, VehicleDeleteBar, useVehicleSelection } from "../components/VehicleDelete";
 import { Badge, ErrorBox, Field, Modal, PageHeader, Spinner } from "../components/ui";
 
 type View = "" | "OVERDUE" | "DUE_SOON" | "OK" | "MISSING_SERVICE_RECORD" | "NO_DATE" | "NO_BASELINE" | "NO_SCAN";
@@ -53,6 +54,9 @@ export function ServiceDuePage() {
   const count = (v: View) => data.filter((r) => matches(r, v)).length;
   const withService = data.filter((r) => r.lastServiceId).length;
   const writer = can(user, "write");
+  const manager = can(user, "manage");
+  const sel = useVehicleSelection();
+  const pickV = (r: Row) => ({ id: r.vehicleId as number, registrationNumber: r.registrationNumber as string });
   const pick = (v: View) => { update({ due: view === v ? "" : v }); setPage(0); };
   const refresh = () => qc.invalidateQueries({ queryKey: ["service-status"] });
 
@@ -92,6 +96,7 @@ export function ServiceDuePage() {
         </>} />
       <FilterBar value={filters} onApply={(f) => { setFilters(f); setPage(0); }} hideDates show={["fuelType", "category", "operatorType", "departmentId", "status"]} />
       <ErrorBox error={all.error ?? err} />
+      <VehicleDeleteBar sel={sel} />
       {all.isLoading && <Spinner />}
       {all.data && (
         <>
@@ -113,9 +118,10 @@ export function ServiceDuePage() {
               <table className="table svc-table" aria-label="Vehicle service">
                 <thead>
                   <tr>
+                    {manager && <th className="check-col"><SelectAll sel={sel} rows={shown.map(pickV)} /></th>}
                     <th className="sticky-col">Vehicle</th><th>Status</th><th>Last service</th>
                     <th style={{ textAlign: "right" }}>Current est. km</th><th>Next service (km)</th>
-                    <th>Next service date</th><th>Job card / invoice</th><th />
+                    <th>Next service date</th><th>Job card / invoice</th><th />{manager && <th>Delete</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -123,7 +129,8 @@ export function ServiceDuePage() {
                     const used = r.intervalKm && r.remainingKm !== null && r.remainingKm !== undefined
                       ? Math.min(100, Math.max(0, ((Number(r.intervalKm) - Number(r.remainingKm)) / Number(r.intervalKm)) * 100)) : null;
                     return (
-                      <tr key={r.vehicleId} className={`svc-${r.status}`}>
+                      <tr key={r.vehicleId} className={`svc-${r.status}${sel.has(r.vehicleId) ? " row-picked" : ""}`}>
+                        {manager && <td className="check-col"><SelectOne sel={sel} v={pickV(r)} /></td>}
                         <td className="sticky-col">
                           <Link className="mono strong" to={`/vehicles/${r.vehicleId}`}>{r.registrationNumber}</Link>
                           <div className="muted small">{r.model}{r.departmentName ? ` · ${r.departmentName}` : ""}</div>
@@ -161,6 +168,7 @@ export function ServiceDuePage() {
                             : r.lastServiceId ? <span className="doc-nofile" title="Drop a PDF / photo here">⤒ not uploaded</span> : <span className="muted">—</span>}
                         </td>
                         <td><button className="btn btn-small" onClick={() => setOpen(r)} aria-label={`Open service for ${r.registrationNumber}`}>{writer ? "Record / upload" : "View"}</button></td>
+                        {manager && <td><DeleteVehicleButton v={pickV(r)} /></td>}
                       </tr>
                     );
                   })}

@@ -241,6 +241,9 @@ public class FuelService {
         if (rows.isEmpty()) {
             throw ApiException.badRequest("UNKNOWN_VEHICLE", "Vehicle not found");
         }
+        if ("DELETED".equals(rows.get(0).get("status"))) {
+            throw ApiException.badRequest("VEHICLE_DELETED", "This vehicle is deleted. Restore it under Vehicles to record fuel.");
+        }
         return rows.get(0);
     }
 

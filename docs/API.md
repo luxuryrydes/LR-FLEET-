@@ -36,6 +36,9 @@ Status codes: 400 validation, 401 not signed in, 403 role, 404 not found, 409 co
 | GET | /api/vehicles/{id} | READ | Vehicle + `serviceStatus` + 90-day `efficiency` summary |
 | POST / PUT | /api/vehicles, /api/vehicles/{id} | WRITE | Registration is normalised; duplicates → 409 unless `duplicateRegistrationReason` is given. Changes to driver, department, vendor, ownership, status or customer are written to the history. Only a manager can set INACTIVE/SOLD/SCRAPPED. |
 | POST | /api/vehicles/{id}/deactivate | MANAGE | `{reason}` |
+| POST | /api/vehicles/delete | MANAGE | `{ids[], reason}` (1–500): status DELETED, hidden from every list, dashboard, report, import match and alert; history kept. → `{deleted, skipped[]}` |
+| POST | /api/vehicles/restore | MANAGE | `{ids[]}`: back to the status before deletion → `{restored, skipped[]}` |
+| POST | /api/vehicles/purge | ADMIN | `{ids[]}`: permanently removes deleted vehicles **without any records**; others are kept and listed with what they hold → `{removed, kept[]}` |
 | GET | /api/vehicles/{id}/assignments | READ | Effective-dated history |
 | GET/POST/DELETE | /api/vehicles/{id}/aliases[/{aliasId}] | READ/WRITE/MANAGE | GPS device names |
 | GET/POST | /api/vehicles/{id}/odometer | READ/WRITE | Manual reading `{date, km}` → `{ok, problem, message}` |

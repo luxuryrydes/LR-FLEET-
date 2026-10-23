@@ -74,7 +74,7 @@ public class ServiceImportService {
                 SELECT v.id, coalesce(v.service_interval_km, c.service_interval_km) AS km,
                        coalesce(v.service_interval_months, c.service_interval_months) AS months
                 FROM vehicles v JOIN vehicle_categories c ON c.code = v.category_code
-                WHERE v.registration_normalized = :r AND v.status NOT IN ('SOLD', 'SCRAPPED')
+                WHERE v.registration_normalized = :r AND v.status NOT IN ('SOLD', 'SCRAPPED', 'DELETED')
                 ORDER BY v.duplicate_registration_reason NULLS FIRST, v.id LIMIT 1""", Map.of("r", reg), Rows::map);
         if (v.isEmpty()) {
             throw ApiException.badRequest("VEHICLE_NOT_FOUND", reg + " is not in the vehicle master (or is sold). Add it under Vehicles first.");

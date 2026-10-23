@@ -2,11 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, download, type Page, type Row } from "../lib/api";
-import { Can } from "../lib/auth";
+import { Can, can, useAuth } from "../lib/auth";
 import { filtersToQuery } from "../lib/filters";
 import { date, label, number } from "../lib/format";
 import { useUrlFilters } from "../lib/useUrlFilters";
 import { DataTable } from "../components/DataTable";
+import { DeleteVehicleButton, VehicleDeleteBar, useVehicleSelection } from "../components/VehicleDelete";
 import { FilterBar } from "../components/FilterBar";
 import { Badge, ErrorBox, PageHeader } from "../components/ui";
 
@@ -16,6 +17,10 @@ export function VehiclesPage() {
   const [exportError, setExportError] = useState<unknown>(null);
   const q = filtersToQuery({ ...filters, from: "", to: "" }, { q: extra.q, page, size: 25, sort });
   const list = useQuery({ queryKey: ["vehicles", q], queryFn: () => api.get<Page<Row>>("/api/vehicles", q) });
+  const { user } = useAuth();
+  const sel = useVehicleSelection();
+  const deletedView = filters.status === "DELETED";
+  const pick = (r: Row) => ({ id: r.id as number, registrationNumber: r.registrationNumber as string });
 
   const exportAs = (format: string) =>
     download("/api/vehicles/export", { ...filtersToQuery({ ...filters, from: "", to: "" }, { q: extra.q }), format }, `vehicles.${format}`)
@@ -37,8 +42,11 @@ export function VehiclesPage() {
           </>
         }
       />
-      <FilterBar value={filters} onApply={setFilters} hideDates />
+      <FilterBar value={filters} onApply={(f) => { setFilters(f); sel.clear(); }} hideDates />
       <ErrorBox error={list.error ?? exportError} />
+      {deletedView && <p className="muted small">Deleted vehicles are hidden everywhere else. Tick vehicles to restore them
+        {can(user, "admin") ? ", or delete permanently those without any records" : ""}.</p>}
+      <VehicleDeleteBar sel={sel} deletedView={deletedView} />
       <DataTable
         loading={list.isLoading}
         rows={list.data?.items}
@@ -49,6 +57,7 @@ export function VehiclesPage() {
         onSort={(s) => update({ sort: s })}
         onPage={(p) => update({ page: p })}
         onRowClick={(r) => navigate(`/vehicles/${r.id}`)}
+        select={can(user, "manage") ? { sel, pick } : undefined}
         columns={[
           { key: "registrationNumber", header: "Registration", sortable: true, render: (r) => <strong className="mono">{r.registrationNumber}</strong> },
           { key: "make", header: "Make / model", sortable: true, render: (r) => `${r.make} ${r.model}${r.modelYear ? ` (${r.modelYear})` : ""}` },
@@ -60,7 +69,9 @@ export function VehiclesPage() {
           { key: "operatorType", header: "Driver type", render: (r) => <>{label(r.operatorType)}{r.assignmentLabel && <span className="muted small"> ({r.assignmentLabel})</span>}</> },
           { key: "gpsKmTracked", header: "GPS km", render: (r) => r.gpsKmTracked ? <Badge value="OK" text="imported" /> : <Badge value="DUPLICATE" text="not imported" /> },
           { key: "expectedMileage", header: "Expected mileage", align: "right", render: (r) => number(r.expectedMileage, 2) },
-          { key: "status", header: "Status", sortable: true, render: (r) => <><Badge value={r.status} />{r.disposalDate && <span className="muted small"> {date(r.disposalDate)}</span>}</> },
+          { key: "status", header: "Status", sortable: true, render: (r) => <><Badge value={r.status} />{r.disposalDate && <span className="muted small"> {date(r.disposalDate)}</span>}
+            {r.status === "DELETED" && <div className="muted small">{date(r.deletedAt)}{r.deleteReason ? ` · ${r.deleteReason}` : ""}</div>}</> },
+          ...(can(user, "manage") && !deletedView ? [{ key: "delete", header: "Delete", align: "center" as const, render: (r: Row) => <DeleteVehicleButton v={pick(r)} /> }] : []),
         ]}
       />
     </>

@@ -55,6 +55,12 @@ bar, next service date and the job card / invoice. Click *Record / upload* to en
 or drag a PDF/photo onto the Job card box. Load your register with *Import service register (Excel)*, for example
 `VEHICLE_SERVICE_AFTER_REMOVING_VENDOR_REG_NUMBERS.xlsx`.
 
+**Deleting vehicles:** on Vehicles, Vehicle documents, Vehicle service and Monthly mileage, managers see a tick-box column and a
+🗑 Delete column. Tick several vehicles and use *Delete selected*, or delete one with 🗑; a reason is required. Deleted vehicles
+disappear from every page, report, import and alert, but their history is kept. To undo, open Vehicles → Status: *Deleted*,
+tick them and click *Restore selected*. Admins can *Delete permanently* there, which works only for vehicles without any records.
+Re-importing the master sheet never brings a deleted vehicle back.
+
 **"Reading the file…" never finishes?** The import worker isn't running. The import screen now says so. Keep the
 *Import worker* window open locally, or deploy the worker on Render (see [DEPLOYMENT](docs/DEPLOYMENT.md)).
 

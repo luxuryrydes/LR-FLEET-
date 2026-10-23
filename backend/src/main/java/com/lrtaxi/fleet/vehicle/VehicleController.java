@@ -40,8 +40,11 @@ public class VehicleController {
     private final OdometerService odometer;
     private final ServiceStatusService serviceStatus;
     private final EfficiencyService efficiency;
+    private final VehicleDeleteService deletes;
 
-    public VehicleController(VehicleService vehicles, OdometerService odometer, ServiceStatusService serviceStatus, EfficiencyService efficiency) {
+    public VehicleController(VehicleService vehicles, OdometerService odometer, ServiceStatusService serviceStatus, EfficiencyService efficiency,
+                             VehicleDeleteService deletes) {
+        this.deletes = deletes;
         this.vehicles = vehicles;
         this.odometer = odometer;
         this.serviceStatus = serviceStatus;
@@ -106,6 +109,29 @@ public class VehicleController {
     @PreAuthorize(Roles.WRITE)
     public void update(@PathVariable long id, @Valid @RequestBody VehicleRequest req) {
         vehicles.update(id, req);
+    }
+
+    public record IdsRequest(@NotNull @Size(min = 1, max = VehicleDeleteService.MAX_BATCH) java.util.List<Long> ids, @Size(max = 500) String reason) {
+    }
+
+    /** Delete one or many vehicles (hidden everywhere, history kept, restorable). */
+    @PostMapping("/delete")
+    @PreAuthorize(Roles.MANAGE)
+    public Map<String, Object> delete(@Valid @RequestBody IdsRequest req) {
+        return deletes.delete(req.ids(), req.reason());
+    }
+
+    @PostMapping("/restore")
+    @PreAuthorize(Roles.MANAGE)
+    public Map<String, Object> restore(@Valid @RequestBody IdsRequest req) {
+        return deletes.restore(req.ids());
+    }
+
+    /** Permanently removes deleted vehicles that have no records. */
+    @PostMapping("/purge")
+    @PreAuthorize(Roles.ADMIN)
+    public Map<String, Object> purge(@Valid @RequestBody IdsRequest req) {
+        return deletes.purge(req.ids());
     }
 
     @PostMapping("/{id}/deactivate")

@@ -7,6 +7,7 @@ import { useLookups } from "../lib/hooks";
 import { date, label, number } from "../lib/format";
 import { DataTable } from "../components/DataTable";
 import { VehiclePicker } from "../components/VehiclePicker";
+import { DeleteVehicleButton, SelectAll, SelectOne, VehicleDeleteBar, useVehicleSelection } from "../components/VehicleDelete";
 import { Badge, ErrorBox, Field, Modal, PageHeader, Spinner, Tabs, codes } from "../components/ui";
 
 type Bucket = "matrix" | "expired" | "expiring" | "missing" | "pendingVerification" | "driverLicences" | "vehicle";
@@ -117,6 +118,9 @@ export function DocumentMatrix() {
   const summary = (m.data?.summary ?? {}) as Record<string, Record<string, number>>;
   const shown = useMemo(() => rows.slice(page * PAGE, page * PAGE + PAGE), [rows, page]);
   const writer = can(user, "write");
+  const manager = can(user, "manage");
+  const sel = useVehicleSelection();
+  const pickV = (v: Row) => ({ id: v.vehicleId as number, registrationNumber: v.registrationNumber as string });
 
   const focus = (t: string, s: State) => {
     setDocType(t);
@@ -194,6 +198,7 @@ export function DocumentMatrix() {
         <button className="btn" onClick={() => download("/api/documents/matrix/export", { ...params, format: "xlsx" }).catch(setErr)}>Export Excel</button>
       </div>
       <ErrorBox error={m.error ?? err} />
+      <VehicleDeleteBar sel={sel} />
       {m.isLoading && <Spinner />}
       {m.data && (
         <div className="table-wrap">
@@ -201,13 +206,16 @@ export function DocumentMatrix() {
             <table className="table doc-matrix" aria-label="Vehicle documents">
               <thead>
                 <tr>
+                  {manager && <th className="check-col"><SelectAll sel={sel} rows={shown.map(pickV)} /></th>}
                   <th className="sticky-col">Vehicle</th>
                   {types.map((t) => <th key={t.code} className={docType === t.code ? "col-focus" : undefined}>{t.label}</th>)}
+                  {manager && <th>Delete</th>}
                 </tr>
               </thead>
               <tbody>
                 {shown.map((v) => (
-                  <tr key={v.vehicleId}>
+                  <tr key={v.vehicleId} className={sel.has(v.vehicleId) ? "row-picked" : undefined}>
+                    {manager && <td className="check-col"><SelectOne sel={sel} v={pickV(v)} /></td>}
                     <td className="sticky-col">
                       <Link className="mono strong" to={`/vehicles/${v.vehicleId}`}>{v.registrationNumber}</Link>
                       <div className="muted small">{v.model}{v.registrationClass ? ` · ${label(v.registrationClass)}` : ""}{v.departmentName ? ` · ${v.departmentName}` : ""}</div>
@@ -233,6 +241,7 @@ export function DocumentMatrix() {
                         </td>
                       );
                     })}
+                    {manager && <td><DeleteVehicleButton v={pickV(v)} /></td>}
                   </tr>
                 ))}
               </tbody>

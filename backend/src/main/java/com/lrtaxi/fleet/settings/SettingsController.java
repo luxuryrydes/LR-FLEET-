@@ -54,7 +54,7 @@ public class SettingsController {
                 Map.entry("fuelTypes", List.of("PETROL", "DIESEL", "CNG", "CNG_PETROL", "ELECTRIC", "HYBRID", "PLUGIN_HYBRID")),
                 Map.entry("energyTypes", List.of("PETROL", "DIESEL", "CNG", "ELECTRICITY")),
                 Map.entry("ownershipTypes", List.of("OWNED", "LEASED", "VENDOR_ATTACHED", "RENTED")),
-                Map.entry("vehicleStatuses", List.of("ACTIVE", "INACTIVE", "IDLE", "WORKSHOP", "SOLD", "SCRAPPED")),
+                Map.entry("vehicleStatuses", List.of("ACTIVE", "INACTIVE", "IDLE", "WORKSHOP", "SOLD", "SCRAPPED", "DELETED")),
                 Map.entry("documentTypes", List.of("INSURANCE", "INSURANCE_OD", "PUC", "FITNESS", "ROAD_TAX", "PERMIT", "PERMIT_1Y", "REGISTRATION",
                         "DRIVING_LICENCE", "OTHER")),
                 Map.entry("operatorTypes", List.of("OWN_DRIVER", "VENDOR", "GOVT_DRIVER", "OFFICER", "PERSONAL", "NONE")),

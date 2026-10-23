@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Row } from "../lib/api";
 import { Empty, Spinner } from "./ui";
+import { SelectAll, SelectOne, type Picked, type Selection } from "./VehicleDelete";
 
 export interface Column {
   key: string;
@@ -24,10 +25,12 @@ interface Props {
   onRowClick?: (row: Row) => void;
   rowKey?: (row: Row, i: number) => string | number;
   empty?: ReactNode;
+  /** Adds a tick-box column; `pick` says which vehicle a row is. */
+  select?: { sel: Selection; pick: (row: Row) => Picked };
 }
 
 /** Server-side paginated, sortable table: the browser only ever holds one page of records. */
-export function DataTable({ columns, rows, loading, total, page = 0, size = 25, sort, onSort, onPage, onRowClick, rowKey, empty }: Props) {
+export function DataTable({ columns, rows, loading, total, page = 0, size = 25, sort, onSort, onPage, onRowClick, rowKey, empty, select }: Props) {
   const [sortKey, sortDir] = (sort ?? "").split(",");
   const pages = total !== undefined ? Math.max(1, Math.ceil(total / size)) : 1;
   return (
@@ -36,6 +39,7 @@ export function DataTable({ columns, rows, loading, total, page = 0, size = 25, 
         <table className="table">
           <thead>
             <tr>
+              {select && <th className="check-col"><SelectAll sel={select.sel} rows={(rows ?? []).map(select.pick)} /></th>}
               {columns.map((c) => {
                 const active = sortKey === c.key;
                 return (
@@ -56,7 +60,8 @@ export function DataTable({ columns, rows, loading, total, page = 0, size = 25, 
           <tbody>
             {rows?.map((r, i) => (
               <tr key={rowKey ? rowKey(r, i) : (r.id as number) ?? i} onClick={onRowClick ? () => onRowClick(r) : undefined}
-                  className={onRowClick ? "clickable" : undefined}>
+                  className={[onRowClick ? "clickable" : "", select && select.sel.has(select.pick(r).id) ? "row-picked" : ""].join(" ").trim() || undefined}>
+                {select && <td className="check-col"><SelectOne sel={select.sel} v={select.pick(r)} /></td>}
                 {columns.map((c) => (
                   <td key={c.key} style={{ textAlign: c.align ?? "left" }}>
                     {c.render ? c.render(r) : r[c.key] ?? "—"}

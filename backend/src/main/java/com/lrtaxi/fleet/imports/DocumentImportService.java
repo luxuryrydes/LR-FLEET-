@@ -64,7 +64,7 @@ public class DocumentImportService {
     private int[] apply(long batchId, JsonNode p, boolean replace, String why) {
         String reg = RegistrationNormalizer.normalize(text(p, "registration"));
         List<Map<String, Object>> v = jdbc.query("""
-                SELECT id, registration_class FROM vehicles WHERE registration_normalized = :r AND status NOT IN ('SOLD', 'SCRAPPED')
+                SELECT id, registration_class FROM vehicles WHERE registration_normalized = :r AND status NOT IN ('SOLD', 'SCRAPPED', 'DELETED')
                 ORDER BY duplicate_registration_reason NULLS FIRST, id LIMIT 1""", Map.of("r", reg), Rows::map);
         if (v.isEmpty()) {
             throw ApiException.badRequest("VEHICLE_NOT_FOUND", reg + " is not in the vehicle master (or is sold). Add it under Vehicles first.");

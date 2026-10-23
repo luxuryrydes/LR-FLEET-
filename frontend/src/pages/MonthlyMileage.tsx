@@ -3,9 +3,11 @@ import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api, download, type Row } from "../lib/api";
+import { can, useAuth } from "../lib/auth";
 import { filtersFromParams, filtersToQuery, type FleetFilters } from "../lib/filters";
 import { label, month as monthLabel, number, rupees } from "../lib/format";
 import { FilterBar } from "../components/FilterBar";
+import { DeleteVehicleButton, SelectAll, SelectOne, VehicleDeleteBar, useVehicleSelection } from "../components/VehicleDelete";
 import { Badge, Card, ErrorBox, PageHeader, Spinner, Tabs } from "../components/ui";
 
 type View = "" | "OK" | "MIXED_FUEL" | "NO_KM" | "NO_FUEL" | "BELOW" | "IMPLAUSIBLE";
@@ -25,6 +27,10 @@ export function MonthlyMileagePage() {
   const [view, setView] = useState<View>("");
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "costPerKm", desc: true });
   const [err, setErr] = useState<unknown>(null);
+  const { user } = useAuth();
+  const manager = can(user, "manage");
+  const sel = useVehicleSelection();
+  const pickV = (r: Row) => ({ id: r.vehicleId as number, registrationNumber: r.registrationNumber as string });
   const q = { ...filtersToQuery({ ...filters, from: "", to: "" }), month };
 
   const data = useQuery({ queryKey: ["monthly-mileage", q], queryFn: () => api.get<Row>("/api/monthly-mileage", q) });
@@ -92,6 +98,7 @@ export function MonthlyMileagePage() {
         </>} />
       <FilterBar value={filters} onApply={setFilters} hideDates show={["fuelType", "category", "operatorType", "departmentId", "status"]} />
       <ErrorBox error={data.error ?? trend.error ?? err} />
+      <VehicleDeleteBar sel={sel} />
       {data.isLoading && <Spinner />}
       {t && (
         <>
@@ -149,6 +156,7 @@ export function MonthlyMileagePage() {
               <table className="table" aria-label="Monthly mileage by vehicle">
                 <thead>
                   <tr>
+                    {manager && <th className="check-col"><SelectAll sel={sel} rows={shown.map(pickV)} /></th>}
                     {th("registrationNumber", "Vehicle", false)}
                     <th>Fuel</th>
                     {th("km", "GPS km")}
@@ -159,11 +167,13 @@ export function MonthlyMileagePage() {
                     <th style={{ textAlign: "right" }}>Expected</th>
                     {th("variancePct", "Variance")}
                     <th>Status</th>
+                    {manager && <th>Delete</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {shown.map((r) => (
-                    <tr key={r.vehicleId} className="clickable" onClick={() => navigate(`/vehicles/${r.vehicleId}`)}>
+                    <tr key={r.vehicleId} className={`clickable${sel.has(r.vehicleId) ? " row-picked" : ""}`} onClick={() => navigate(`/vehicles/${r.vehicleId}`)}>
+                      {manager && <td className="check-col"><SelectOne sel={sel} v={pickV(r)} /></td>}
                       <td><strong className="mono">{r.registrationNumber}</strong><div className="muted small">{r.vehicle} · {label(r.operatorType)}</div></td>
                       <td>{label(r.fuelType)}</td>
                       <td className="num" style={{ textAlign: "right" }}>{number(r.km, 0)}</td>
@@ -182,6 +192,7 @@ export function MonthlyMileagePage() {
                       </td>
                       <td><Badge value={r.belowExpected ? "HIGH" : r.status}
                                  text={r.belowExpected ? "Below expected" : r.status === "IMPLAUSIBLE" ? "Implausible — check fuel records" : label(r.status)} /></td>
+                      {manager && <td><DeleteVehicleButton v={pickV(r)} /></td>}
                     </tr>
                   ))}
                 </tbody>

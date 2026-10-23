@@ -36,6 +36,10 @@ public class AlertService {
     /** Creates an alert, or refreshes the open alert with the same dedupe key (never duplicates). Returns the alert id. */
     @Transactional
     public long raise(AlertSpec s) {
+        if (s.vehicleId() != null && Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT status = 'DELETED' FROM vehicles WHERE id = :v", Map.of("v", s.vehicleId()), Boolean.class))) {
+            return 0;                                   // no alerts for deleted vehicles
+        }
         MapSqlParameterSource p = new MapSqlParameterSource()
                 .addValue("type", s.type()).addValue("sev", s.severity()).addValue("v", s.vehicleId()).addValue("key", s.dedupeKey())
                 .addValue("title", s.title()).addValue("msg", s.message()).addValue("rule", Json.write(s.rule()))
