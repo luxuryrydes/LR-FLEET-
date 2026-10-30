@@ -95,7 +95,7 @@ describe("Import mapping step", () => {
 describe("Vehicle form validation messages", () => {
   const empty: VehicleDraft = {
     registrationNumber: "", duplicateRegistrationReason: "", make: "", model: "", modelYear: "", fuelType: "", categoryCode: "", ownershipType: "OWNED",
-    vendorId: "", currentDriverId: "", currentDepartmentId: "", customerName: "", status: "ACTIVE", expectedMileage: "", serviceIntervalKm: "",
+    effectiveDate: "", vendorId: "", currentDriverId: "", currentDepartmentId: "", customerName: "", status: "ACTIVE", expectedMileage: "", serviceIntervalKm: "",
     serviceIntervalMonths: "", tankCapacity: "", batteryCapacityKwh: "", purchaseDate: "", purchaseCost: "", chassisNumber: "", engineNumber: "",
     gpsDeviceName: "", remarks: "", openingOdometerKm: "", openingOdometerDate: "", changeReason: "",
     operatorType: "OWN_DRIVER", gpsKmTracked: true, registrationClass: "",
@@ -114,7 +114,7 @@ describe("Vehicle form validation messages", () => {
 
   it("shows messages on submit and does not call the API when invalid", async () => {
     const onSubmit = vi.fn();
-    wrap(<VehicleForm initial={empty} editing={false} onSubmit={onSubmit} />);
+    wrap(<authModule.AuthContext.Provider value={{ user: { id: 1, email: "u@x", fullName: "U", roles: ["OPERATOR"] }, loading: false, login: vi.fn(), logout: vi.fn() }}><VehicleForm initial={empty} editing={false} onSubmit={onSubmit} /></authModule.AuthContext.Provider>);
     await userEvent.click(screen.getByRole("button", { name: "Create vehicle" }));
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.getByText("Registration number is required")).toBeInTheDocument();
@@ -123,7 +123,7 @@ describe("Vehicle form validation messages", () => {
 
   it("previews the normalised registration and submits a clean payload", async () => {
     const onSubmit = vi.fn();
-    wrap(<VehicleForm initial={{ ...empty, make: "Maruti", model: "Dzire", fuelType: "CNG", categoryCode: "SEDAN" }} editing={false} onSubmit={onSubmit} />);
+    wrap(<authModule.AuthContext.Provider value={{ user: { id: 1, email: "u@x", fullName: "U", roles: ["OPERATOR"] }, loading: false, login: vi.fn(), logout: vi.fn() }}><VehicleForm initial={{ ...empty, make: "Maruti", model: "Dzire", fuelType: "CNG", categoryCode: "SEDAN" }} editing={false} onSubmit={onSubmit} /></authModule.AuthContext.Provider>);
     await userEvent.type(screen.getByPlaceholderText("DL 1C AB 1234"), "dl 1c-ab 1234");
     expect(screen.getByText("Will be saved as DL1CAB1234")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Create vehicle" }));
@@ -340,5 +340,38 @@ describe("Deleting vehicles", () => {
     wrap(as(["OPERATOR"], <Harness />));
     await userEvent.click(screen.getByLabelText("Select DL1AA0001"));
     expect(screen.queryByRole("button", { name: "Delete selected" })).not.toBeInTheDocument();
+  });
+});
+
+
+describe("Changing a vehicle's driver or vendor", () => {
+  const base: VehicleDraft = {
+    registrationNumber: "CH5250", duplicateRegistrationReason: "", make: "Toyota", model: "Innova Crysta", modelYear: "2026", fuelType: "DIESEL",
+    categoryCode: "SEDAN", ownershipType: "OWNED", effectiveDate: "2026-10-01", vendorId: "", currentDriverId: "1", currentDepartmentId: "4",
+    customerName: "", status: "ACTIVE", expectedMileage: "", serviceIntervalKm: "", serviceIntervalMonths: "", tankCapacity: "", batteryCapacityKwh: "",
+    purchaseDate: "", purchaseCost: "", chassisNumber: "", engineNumber: "", gpsDeviceName: "", remarks: "", openingOdometerKm: "",
+    openingOdometerDate: "", changeReason: "", operatorType: "OWN_DRIVER", gpsKmTracked: true, registrationClass: "COMMERCIAL",
+  };
+
+  it("switches to vendor with GPS km set aside, from the chosen date, and offers adding a new vendor", async () => {
+    const onSubmit = vi.fn();
+    const qcLookups = { ...lookups, vendors: [{ id: 9, name: "BS Nayak", vendorType: "VEHICLE_VENDOR" }], drivers: [{ id: 1, fullName: "SANJAY JADU" }] };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(["lookups"], qcLookups);
+    render(<QueryClientProvider client={qc}><MemoryRouter>
+      <authModule.AuthContext.Provider value={{ user: { id: 1, email: "u@x", fullName: "U", roles: ["MANAGER"] }, loading: false, login: vi.fn(), logout: vi.fn() }}>
+        <VehicleForm initial={base} editing onSubmit={onSubmit} heldGps={{ days: 0, km: 0 }} />
+      </authModule.AuthContext.Provider>
+    </MemoryRouter></QueryClientProvider>);
+    expect(screen.getByRole("button", { name: "+ New vendor" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "+ New driver" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "+ New department" })).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("Vendor"), "9");
+    expect(screen.getByLabelText("Driver type")).toHaveValue("VENDOR");
+    expect(screen.getByText(/No longer an LR driver/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Change applies from")).toHaveValue("2026-10-01");
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ vendorId: 9, currentDriverId: null, operatorType: "VENDOR", gpsKmTracked: false,
+      ownershipType: "VENDOR_ATTACHED", effectiveDate: "2026-10-01" }));
   });
 });

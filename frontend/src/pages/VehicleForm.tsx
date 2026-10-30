@@ -2,9 +2,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, ApiError, type Row } from "../lib/api";
+import { can, useAuth } from "../lib/auth";
+import { date, number, todayIso } from "../lib/format";
+import { QuickAddModal, type QuickKind } from "../components/QuickAdd";
 import { useLookups } from "../lib/hooks";
 import { normalizeRegistration } from "../lib/registration";
-import { Card, ErrorBox, Field, PageHeader, Select, Spinner, codes } from "../components/ui";
+import { Card, ErrorBox, Field, Notice, PageHeader, Select, Spinner, codes } from "../components/ui";
 
 export interface VehicleDraft {
   registrationNumber: string;
@@ -34,6 +37,7 @@ export interface VehicleDraft {
   openingOdometerKm: string;
   openingOdometerDate: string;
   changeReason: string;
+  effectiveDate: string;
   operatorType: string;
   gpsKmTracked: boolean;
   registrationClass: string;
@@ -44,7 +48,7 @@ const EMPTY: VehicleDraft = {
   ownershipType: "OWNED", vendorId: "", currentDriverId: "", currentDepartmentId: "", customerName: "", status: "ACTIVE",
   expectedMileage: "", serviceIntervalKm: "", serviceIntervalMonths: "", tankCapacity: "", batteryCapacityKwh: "", purchaseDate: "",
   purchaseCost: "", chassisNumber: "", engineNumber: "", gpsDeviceName: "", remarks: "", openingOdometerKm: "", openingOdometerDate: "",
-  changeReason: "", operatorType: "OWN_DRIVER", gpsKmTracked: true, registrationClass: "",
+  changeReason: "", effectiveDate: "", operatorType: "OWN_DRIVER", gpsKmTracked: true, registrationClass: "",
 };
 
 /** Client-side checks for immediate feedback. The server repeats every check and is authoritative. */
@@ -81,7 +85,7 @@ function toPayload(d: VehicleDraft) {
     serviceIntervalMonths: d.serviceIntervalMonths ? Number(d.serviceIntervalMonths) : null, tankCapacity: n(d.tankCapacity),
     batteryCapacityKwh: n(d.batteryCapacityKwh), purchaseDate: n(d.purchaseDate), purchaseCost: n(d.purchaseCost),
     chassisNumber: n(d.chassisNumber), engineNumber: n(d.engineNumber), gpsDeviceName: n(d.gpsDeviceName), remarks: n(d.remarks),
-    openingOdometerKm: n(d.openingOdometerKm), openingOdometerDate: n(d.openingOdometerDate), changeReason: n(d.changeReason),
+    openingOdometerKm: n(d.openingOdometerKm), openingOdometerDate: n(d.openingOdometerDate), changeReason: n(d.changeReason), effectiveDate: n(d.effectiveDate),
     operatorType: d.operatorType || "OWN_DRIVER", gpsKmTracked: d.gpsKmTracked, registrationClass: n(d.registrationClass),
   };
 }
@@ -97,18 +101,22 @@ function fromVehicle(v: Row): VehicleDraft {
     serviceIntervalMonths: s(v.serviceIntervalMonths), tankCapacity: s(v.tankCapacity), batteryCapacityKwh: s(v.batteryCapacityKwh),
     purchaseDate: s(v.purchaseDate), purchaseCost: s(v.purchaseCost), chassisNumber: s(v.chassisNumber), engineNumber: s(v.engineNumber),
     gpsDeviceName: s(v.gpsDeviceName), remarks: s(v.remarks), operatorType: s(v.operatorType) || "OWN_DRIVER",
-    gpsKmTracked: Boolean(v.gpsKmTracked), registrationClass: s(v.registrationClass),
+    gpsKmTracked: Boolean(v.gpsKmTracked), registrationClass: s(v.registrationClass), effectiveDate: todayIso(),
   };
 }
 
-export function VehicleForm({ initial, editing, onSubmit, busy, serverError }: {
+export function VehicleForm({ initial, editing, onSubmit, busy, serverError, heldGps }: {
   initial: VehicleDraft;
   editing: boolean;
   onSubmit: (payload: ReturnType<typeof toPayload>) => void;
   busy?: boolean;
   serverError?: unknown;
+  /** GPS km kept aside while the vehicle was not with an LR driver: {days, km, firstDate, lastDate} */
+  heldGps?: Row;
 }) {
   const [d, setD] = useState<VehicleDraft>(initial);
+  const [quick, setQuick] = useState<QuickKind | null>(null);
+  const { user } = useAuth();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState(false);
   const { data: lk } = useLookups();
@@ -134,6 +142,19 @@ export function VehicleForm({ initial, editing, onSubmit, busy, serverError }: {
     if (Object.keys(v).length === 0) onSubmit(toPayload(d));
   };
   const normalized = normalizeRegistration(d.registrationNumber);
+  // What changed in the assignment (edit only): drives the effective date and the GPS km note.
+  const assignmentChanged = editing && (["vendorId", "currentDriverId", "currentDepartmentId", "operatorType", "ownershipType", "status"] as const)
+    .some((k) => d[k] !== initial[k]);
+  const trackingChanged = editing && d.gpsKmTracked !== initial.gpsKmTracked;
+  // Picking a driver for a vendor vehicle (or a vendor without a driver) switches the driver type and GPS km with it.
+  const pickDriver = (v: string) => setD((x) => ({ ...x, currentDriverId: v,
+    ...(v && x.operatorType === "VENDOR" ? { operatorType: "OWN_DRIVER", gpsKmTracked: true, vendorId: "" } : {}) }));
+  const pickVendor = (v: string) => setD((x) => ({ ...x, vendorId: v,
+    ...(v && x.operatorType === "OWN_DRIVER" ? { operatorType: "VENDOR", gpsKmTracked: false, currentDriverId: "", ownershipType: "VENDOR_ATTACHED" } : {}) }));
+  const vehicleVendors = (lk?.vendors ?? []).filter((v) => v.vendorType === "VEHICLE_VENDOR" || v.vendorType === "OTHER" || String(v.id) === d.vendorId);
+  const addLink = (kind: QuickKind, label: string) => (
+    <button type="button" className="link-btn small" onClick={() => setQuick(kind)}>+ {label}</button>
+  );
 
   return (
     <form onSubmit={submit} noValidate>
@@ -167,15 +188,15 @@ export function VehicleForm({ initial, editing, onSubmit, busy, serverError }: {
           <Field label="Ownership" required>
             <Select value={d.ownershipType} onChange={setV("ownershipType")} options={codes(lk?.ownershipTypes)} aria-label="Ownership" />
           </Field>
-          <Field label="Vendor">
-            <Select value={d.vendorId} onChange={setV("vendorId")} placeholder="None" aria-label="Vendor"
-                    options={(lk?.vendors ?? []).map((v) => ({ value: String(v.id), label: v.name }))} />
+          <Field label="Vendor" hint={addLink("vendor", "New vendor")}>
+            <Select value={d.vendorId} onChange={pickVendor} placeholder="None" aria-label="Vendor"
+                    options={vehicleVendors.map((v) => ({ value: String(v.id), label: v.name }))} />
           </Field>
-          <Field label="Driver">
-            <Select value={d.currentDriverId} onChange={setV("currentDriverId")} placeholder="Unassigned" aria-label="Driver"
-                    options={(lk?.drivers ?? []).map((v) => ({ value: String(v.id), label: v.fullName }))} />
+          <Field label="Driver" hint={addLink("driver", "New driver")}>
+            <Select value={d.currentDriverId} onChange={pickDriver} placeholder="Unassigned" aria-label="Driver"
+                    options={(lk?.drivers ?? []).map((v) => ({ value: String(v.id), label: `${v.fullName}${v.phone ? ` · ${v.phone}` : ""}` }))} />
           </Field>
-          <Field label="Department">
+          <Field label="Department" hint={can(user, "manage") ? addLink("department", "New department") : undefined}>
             <Select value={d.currentDepartmentId} onChange={setV("currentDepartmentId")} placeholder="Unassigned" aria-label="Department"
                     options={(lk?.departments ?? []).map((v) => ({ value: String(v.id), label: v.name }))} />
           </Field>
@@ -201,7 +222,22 @@ export function VehicleForm({ initial, editing, onSubmit, busy, serverError }: {
           {editing && (
             <Field label="Reason for change" hint="Recorded in the assignment history"><input value={d.changeReason} onChange={set("changeReason")} /></Field>
           )}
+          {editing && (assignmentChanged || trackingChanged) && (
+            <Field label="Change applies from" required hint="Driver, vendor and department history start on this date">
+              <input type="date" value={d.effectiveDate} max={todayIso()} onChange={set("effectiveDate")} aria-label="Change applies from" />
+            </Field>
+          )}
         </div>
+        {trackingChanged && (
+          <Notice kind="info">
+            {d.gpsKmTracked
+              ? <>Now an LR driver: GPS km from {date(d.effectiveDate)} will be counted.
+                {Number(heldGps?.days) > 0 ? <> {number(heldGps?.days, 0)} days ({number(heldGps?.km, 0)} km, {date(heldGps?.firstDate)} – {date(heldGps?.lastDate)}) were
+                  imported earlier while it was not counted; the ones from {date(d.effectiveDate)} are added automatically.</> : " Later GPS imports include it."}</>
+              : <>No longer an LR driver: GPS km from {date(d.effectiveDate)} are taken out of mileage and kept aside, so they come back
+                automatically if the vehicle returns to an LR driver. Fuel expense keeps being recorded for the vehicle.</>}
+          </Notice>
+        )}
       </Card>
       <Card title="Mileage, service & purchase">
         <div className="form-grid">
@@ -230,6 +266,13 @@ export function VehicleForm({ initial, editing, onSubmit, busy, serverError }: {
       <div className="form-actions">
         <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : editing ? "Save changes" : "Create vehicle"}</button>
       </div>
+      {quick && <QuickAddModal kind={quick} onClose={() => setQuick(null)} onCreated={(id) => {
+        const k = quick;
+        setQuick(null);
+        if (k === "driver") pickDriver(String(id));
+        else if (k === "vendor") pickVendor(String(id));
+        else setD((x) => ({ ...x, currentDepartmentId: String(id) }));
+      }} />}
     </form>
   );
 }
@@ -243,6 +286,7 @@ export function VehicleFormPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [initial, setInitial] = useState<VehicleDraft>(EMPTY);
+  const [gpsResult, setGpsResult] = useState<Row | null>(null);
   useEffect(() => {
     if (existing.data) setInitial(fromVehicle(existing.data));
   }, [existing.data]);
@@ -252,9 +296,11 @@ export function VehicleFormPage() {
     setError(null);
     try {
       if (editing) {
-        await api.put(`/api/vehicles/${id}`, payload);
+        const res = await api.put<Row>(`/api/vehicles/${id}`, payload);
         await qc.invalidateQueries({ queryKey: ["vehicle", id] });
-        navigate(`/vehicles/${id}`);
+        ["gps", "monthly-mileage", "service-status", "kpis", "charts", "lookups"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+        if (res?.gpsKm) setGpsResult(res.gpsKm as Row);
+        else navigate(`/vehicles/${id}`);
       } else {
         const res = await api.post<{ id: number }>("/api/vehicles", payload);
         navigate(`/vehicles/${res.id}`);
@@ -271,7 +317,18 @@ export function VehicleFormPage() {
   return (
     <>
       <PageHeader title={editing ? `Edit ${existing.data?.registrationNumber ?? "vehicle"}` : "Add vehicle"} />
-      <VehicleForm initial={initial} editing={editing} onSubmit={save} busy={busy} serverError={error} />
+      {gpsResult ? (
+        <Card title="Saved">
+          <Notice kind="success">
+            {gpsResult.direction === "ADDED"
+              ? `${number(gpsResult.days, 0)} GPS days (${number(gpsResult.km, 0)} km) from ${date(gpsResult.from)} were added from earlier imports and now count in mileage.`
+              : `${number(gpsResult.days, 0)} GPS days (${number(gpsResult.km, 0)} km) from ${date(gpsResult.from)} were taken out of mileage and kept aside.`}
+          </Notice>
+          <div className="form-actions"><button className="btn btn-primary" onClick={() => navigate(`/vehicles/${id}`)}>Open vehicle</button></div>
+        </Card>
+      ) : (
+        <VehicleForm initial={initial} editing={editing} onSubmit={save} busy={busy} serverError={error} heldGps={existing.data?.heldGps as Row | undefined} />
+      )}
     </>
   );
 }

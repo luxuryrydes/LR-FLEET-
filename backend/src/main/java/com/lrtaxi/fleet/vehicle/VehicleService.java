@@ -50,8 +50,10 @@ public class VehicleService {
     private final NamedParameterJdbcTemplate jdbc;
     private final AuditService audit;
     private final OdometerService odometer;
+    private final com.lrtaxi.fleet.gps.GpsHoldService held;
 
-    public VehicleService(NamedParameterJdbcTemplate jdbc, AuditService audit, OdometerService odometer) {
+    public VehicleService(NamedParameterJdbcTemplate jdbc, AuditService audit, OdometerService odometer, com.lrtaxi.fleet.gps.GpsHoldService held) {
+        this.held = held;
         this.jdbc = jdbc;
         this.audit = audit;
         this.odometer = odometer;
@@ -136,7 +138,8 @@ public class VehicleService {
     }
 
     @Transactional
-    public void update(long id, VehicleRequest r) {
+    /** @return how the vehicle's GPS km moved when its tracking changed (null if it did not) */
+    public Map<String, Object> update(long id, VehicleRequest r) {
         Map<String, Object> before = get(id);
         String norm = normalizeOrFail(r.registrationNumber());
         checkDuplicate(norm, r.duplicateRegistrationReason(), id);
@@ -197,7 +200,14 @@ public class VehicleService {
         if (r.gpsDeviceName() != null && !r.gpsDeviceName().isBlank() && !Objects.equals(r.gpsDeviceName(), before.get("gpsDeviceName"))) {
             addAliasInternal(id, r.gpsDeviceName());
         }
-        audit.record("UPDATE", "VEHICLE", id, before, get(id));
+        // Driver <-> vendor: GPS km from the change date follow the new driver type without a re-import.
+        Map<String, Object> after = get(id);
+        Map<String, Object> gpsChange = null;
+        if (!Objects.equals(after.get("gpsKmTracked"), before.get("gpsKmTracked"))) {
+            gpsChange = held.trackingChanged(id, Boolean.TRUE.equals(after.get("gpsKmTracked")), eff);
+        }
+        audit.record("UPDATE", "VEHICLE", id, before, gpsChange == null ? after : Map.of("vehicle", after, "gpsKm", gpsChange));
+        return gpsChange;
     }
 
     @Transactional

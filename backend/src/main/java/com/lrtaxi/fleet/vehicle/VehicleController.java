@@ -41,10 +41,12 @@ public class VehicleController {
     private final ServiceStatusService serviceStatus;
     private final EfficiencyService efficiency;
     private final VehicleDeleteService deletes;
+    private final com.lrtaxi.fleet.gps.GpsHoldService held;
 
     public VehicleController(VehicleService vehicles, OdometerService odometer, ServiceStatusService serviceStatus, EfficiencyService efficiency,
-                             VehicleDeleteService deletes) {
+                             VehicleDeleteService deletes, com.lrtaxi.fleet.gps.GpsHoldService held) {
         this.deletes = deletes;
+        this.held = held;
         this.vehicles = vehicles;
         this.odometer = odometer;
         this.serviceStatus = serviceStatus;
@@ -96,6 +98,7 @@ public class VehicleController {
         Map<String, Object> v = new HashMap<>(vehicles.get(id));
         v.put("serviceStatus", serviceStatus.forVehicle(id));
         v.put("efficiency", efficiency.vehicleSummary(id, LocalDate.now().minusDays(89), LocalDate.now()));
+        v.put("heldGps", held.summary(id));        // GPS km kept aside while the vehicle is not with an LR driver
         return v;
     }
 
@@ -107,8 +110,9 @@ public class VehicleController {
 
     @PutMapping("/{id}")
     @PreAuthorize(Roles.WRITE)
-    public void update(@PathVariable long id, @Valid @RequestBody VehicleRequest req) {
-        vehicles.update(id, req);
+    public Map<String, Object> update(@PathVariable long id, @Valid @RequestBody VehicleRequest req) {
+        Map<String, Object> gps = vehicles.update(id, req);
+        return gps == null ? Map.of() : Map.of("gpsKm", gps);
     }
 
     public record IdsRequest(@NotNull @Size(min = 1, max = VehicleDeleteService.MAX_BATCH) java.util.List<Long> ids, @Size(max = 500) String reason) {

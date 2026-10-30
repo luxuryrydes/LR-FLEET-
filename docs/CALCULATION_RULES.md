@@ -165,6 +165,12 @@ intervals and data-quality status attached. A low figure is a prompt to investig
 | DUE_SOON | 0 ≤ remaining km ≤ `service.due_soon_km` (500), or next date within `service.due_soon_days` |
 | MISSING_BASELINE / UNRELIABLE_BASELINE | no trusted odometer, or the baseline went backwards (date overdue still wins) |
 
+**Driver ↔ vendor changes and GPS km.** Only vehicles with LR drivers count GPS km, but imported km of the other vehicles are
+kept in `gps_held_km` rather than dropped. When a vehicle's GPS tracking changes (on the vehicle form or from the master sheet),
+the change applies from the effective date. To tracked: kept days on or after that date become current GPS km (existing figures
+are not overwritten) and mileage is recalculated. To not tracked: current GPS days on or after that date are superseded with a
+reason and kept aside. Both directions are recorded in the assignment history and the audit log.
+
 **Service register import.** Each row with a last-service odometer and/or date becomes an interval-resetting routine service
 (source IMPORT). The sheet's "Next Service" km is kept, and is flagged as an override only when it differs from odometer + interval.
 A dated row with an odometer also becomes a trusted odometer reading (the baseline), so GPS km after that date count towards the

@@ -34,6 +34,7 @@ Status codes: 400 validation, 401 not signed in, 403 role, 404 not found, 409 co
 | GET | /api/vehicles | READ | filters + `q` search, paging, `sort=registrationNumber,make,model,status,fuelType,department,createdAt` |
 | GET | /api/vehicles/export?format=xlsx\|csv | READ | Same filters as the list |
 | GET | /api/vehicles/{id} | READ | Vehicle + `serviceStatus` + 90-day `efficiency` summary |
+| POST / PUT | /api/vehicles, /api/vehicles/{id} | WRITE | PUT returns `{gpsKm: {direction: ADDED\|HELD, days, km, from}}` when GPS tracking changed (from `effectiveDate`). |
 | POST / PUT | /api/vehicles, /api/vehicles/{id} | WRITE | Registration is normalised; duplicates → 409 unless `duplicateRegistrationReason` is given. Changes to driver, department, vendor, ownership, status or customer are written to the history. Only a manager can set INACTIVE/SOLD/SCRAPPED. |
 | POST | /api/vehicles/{id}/deactivate | MANAGE | `{reason}` |
 | POST | /api/vehicles/delete | MANAGE | `{ids[], reason}` (1–500): status DELETED, hidden from every list, dashboard, report, import match and alert; history kept. → `{deleted, skipped[]}` |

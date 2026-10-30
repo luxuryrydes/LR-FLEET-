@@ -75,6 +75,7 @@ public class ImportService {
     private final AuditService audit;
     private final MasterImportService master;
     private final DocumentImportService documents;
+    private final com.lrtaxi.fleet.gps.GpsHoldService held;
     private final ServiceImportService services;
     private final com.lrtaxi.fleet.jobs.WorkerMonitor worker;
     private final TransactionTemplate tx;
@@ -84,7 +85,8 @@ public class ImportService {
     public ImportService(NamedParameterJdbcTemplate jdbc, FileService files, JobService jobs, GpsService gps, FuelService fuel,
                          EfficiencyService efficiency, AlertService alerts, AuditService audit, MasterImportService master,
                          DocumentImportService documents, ServiceImportService services, com.lrtaxi.fleet.jobs.WorkerMonitor worker,
-                         PlatformTransactionManager tm) {
+                         com.lrtaxi.fleet.gps.GpsHoldService held, PlatformTransactionManager tm) {
+        this.held = held;
         this.master = master;
         this.services = services;
         this.documents = documents;
@@ -309,7 +311,7 @@ public class ImportService {
         Map<String, Object> b = get(id);
         requireType(b, "GPS_KM");
         GpsDailyDedup.Mode mode = mode(b);
-        List<GpsDailyDedup.DayResult> days = GpsDailyDedup.resolve(gpsRows(id), mode);
+        List<GpsDailyDedup.DayResult> days = GpsDailyDedup.resolve(gpsRows(id, true), mode);
         int insert = 0;
         int same = 0;
         int conflicts = 0;
@@ -455,7 +457,7 @@ public class ImportService {
         int inserted = 0;
         int replaced = 0;
         int skipped = 0;
-        for (GpsDailyDedup.DayResult d : GpsDailyDedup.resolve(gpsRows(id), mode)) {
+        for (GpsDailyDedup.DayResult d : GpsDailyDedup.resolve(gpsRows(id, true), mode)) {
             if (d.outcome() == GpsDailyDedup.Outcome.CONFLICT) {
                 for (Integer row : d.conflictRows()) {
                     rowError(id, row, "km", "DAILY_TOTAL_CONFLICT", d.message(), null);
@@ -488,6 +490,14 @@ public class ImportService {
             }
             if (o == GpsService.Outcome.INSERTED || o == GpsService.Outcome.REPLACED) {
                 touched.add(d.vehicleId());
+            }
+        }
+        // Km of vehicles not driven by LR drivers are kept aside, so they come in by themselves if the vehicle moves to an LR driver.
+        for (GpsDailyDedup.DayResult d : GpsDailyDedup.resolve(gpsRows(id, false), mode)) {
+            if (d.outcome() != GpsDailyDedup.Outcome.CONFLICT) {
+                held.hold(d.vehicleId(), d.date(), d.distanceKm(), mode == GpsDailyDedup.Mode.TRIP ? "TRIP_SUM" : "DAILY_TOTAL",
+                        mode == GpsDailyDedup.Mode.TRIP ? d.tripCount() : null, deviceByRow.get(d.usedRows().get(0)), id,
+                        "Not counted: vehicle not with an LR driver");
             }
         }
         return new int[]{inserted, replaced, skipped};
@@ -540,12 +550,18 @@ public class ImportService {
                 text(p, "notes"));
     }
 
-    private List<GpsDailyDedup.Row> gpsRows(long batchId) {
-        return jdbc.query("""
+    /** tracked = rows of vehicles whose GPS km are counted; otherwise the rows to keep aside (incl. worker-EXCLUDED ones). */
+    private List<GpsDailyDedup.Row> gpsRows(long batchId, boolean tracked) {
+        return jdbc.query(tracked ? """
                 SELECT row_number, vehicle_id, record_date, parsed->>'km' AS km, parsed->>'tripStart' AS trip_start
                 FROM import_staging_rows s
                 WHERE batch_id = :id AND status NOT IN ('REJECTED', 'EXCLUDED') AND vehicle_id IS NOT NULL AND record_date IS NOT NULL
                   AND vehicle_id IN (SELECT id FROM vehicles WHERE gps_km_tracked)
+                ORDER BY row_number""" : """
+                SELECT row_number, vehicle_id, record_date, parsed->>'km' AS km, parsed->>'tripStart' AS trip_start
+                FROM import_staging_rows s
+                WHERE batch_id = :id AND status <> 'REJECTED' AND vehicle_id IS NOT NULL AND record_date IS NOT NULL AND parsed->>'km' IS NOT NULL
+                  AND vehicle_id IN (SELECT id FROM vehicles WHERE NOT gps_km_tracked AND status <> 'DELETED')
                 ORDER BY row_number""", Map.of("id", batchId),
                 (rs, i) -> new GpsDailyDedup.Row(rs.getInt("row_number"), rs.getLong("vehicle_id"), rs.getDate("record_date").toLocalDate(),
                         new BigDecimal(rs.getString("km")), rs.getString("trip_start")));

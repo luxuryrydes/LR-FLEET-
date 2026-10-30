@@ -64,6 +64,12 @@ Uploading the master sheet again lists deleted vehicles that are in it, and rest
 **"Reading the file…" never finishes?** The import worker isn't running. The import screen now says so. Keep the
 *Import worker* window open locally, or deploy the worker on Render (see [DEPLOYMENT](docs/DEPLOYMENT.md)).
 
+**Changing driver / vendor / department:** open the vehicle → *Edit*. Pick another driver, vendor or department, or add a new
+one with *+ New driver*, *+ New vendor* or *+ New department*, and set *Change applies from*. Picking a vendor switches the
+vehicle to Vendor, and picking an LR driver switches it back. GPS km of vendor periods are never lost: they are kept when imported.
+When the vehicle moves to an LR driver, the kept days from the change date are added to its mileage automatically, without a
+re-import. When it moves to a vendor, its counted days from that date are set aside. Fuel expense is recorded either way.
+
 **Updating the master:** upload the new sheet the same way. The confirm step lists every vehicle that will change and which
 details change. Keep *Add new vehicles and update changed ones* (the default), and the summary shows Added / Updated / Already
 up to date.

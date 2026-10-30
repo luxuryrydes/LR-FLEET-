@@ -80,7 +80,7 @@ export function Badge({ value, text }: { value: string | null | undefined; text?
   return <span className={`badge badge-${TONE[value] ?? "blue"}`}>{text ?? label(value)}</span>;
 }
 
-export function Field({ label: l, error, hint, children, required }: { label: string; error?: string; hint?: string; children: ReactNode; required?: boolean }) {
+export function Field({ label: l, error, hint, children, required }: { label: string; error?: string; hint?: ReactNode; children: ReactNode; required?: boolean }) {
   return (
     <label className={`field ${error ? "has-error" : ""}`}>
       <span className="field-label">
