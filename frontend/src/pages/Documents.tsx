@@ -106,7 +106,8 @@ export function DocumentMatrix() {
   const [search, setSearch] = useState("");
   const [registrationClass, setRegistrationClass] = useState("");
   const [docType, setDocType] = useState("");
-  const [state, setState] = useState<State>("");
+  const [urlParams] = useSearchParams();
+  const [state, setState] = useState<State>((urlParams.get("state") as State) || "");
   const [page, setPage] = useState(0);
   const [open, setOpen] = useState<{ vehicle: Row; type: string } | null>(null);
   const [err, setErr] = useState<unknown>(null);

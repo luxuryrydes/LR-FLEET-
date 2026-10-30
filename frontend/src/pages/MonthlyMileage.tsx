@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { axis, bar, grid, SERIES_1, tooltip } from "../lib/chartTheme";
 import { api, download, type Row } from "../lib/api";
 import { can, useAuth } from "../lib/auth";
 import { filtersFromParams, filtersToQuery, type FleetFilters } from "../lib/filters";
@@ -53,6 +54,8 @@ export function MonthlyMileagePage() {
   };
 
   const t = data.data?.totals as Row | undefined;
+  const trendData = (trend.data ?? []).map((r) => ({ month: monthLabel(r.month), km: Number(r.totalKm),
+    cpk: r.costPerKm === null ? null : Number(r.costPerKm), cng: r.mileageByEnergy?.CNG?.mileage ? Number(r.mileageByEnergy.CNG.mileage) : null }));
   const rows = (data.data?.rows ?? []) as Row[];
   const shown = useMemo(() => {
     const f = rows.filter((r) => (view === "" ? true : view === "BELOW" ? r.belowExpected : r.status === view));
@@ -122,26 +125,30 @@ export function MonthlyMileagePage() {
                 : "No mixed-fuel vehicles"}</div>
             </div>
           </div>
-          <Card title="Last 12 months">
-            <div className="chart-box">
-              <ResponsiveContainer>
-                <ComposedChart data={(trend.data ?? []).map((r) => ({ month: monthLabel(r.month), km: Number(r.totalKm), cpk: r.costPerKm === null ? null : Number(r.costPerKm),
-                  cng: r.mileageByEnergy?.CNG?.mileage ? Number(r.mileageByEnergy.CNG.mileage) : null,
-                  mixed: r.mixedFuel?.mileage ? Number(r.mixedFuel.mileage) : null }))}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="month" fontSize={12} />
-                  <YAxis yAxisId="km" fontSize={12} tickFormatter={(v) => number(v, 0)} />
-                  <YAxis yAxisId="r" orientation="right" fontSize={12} tickFormatter={(v) => `₹${v}`} />
-                  <Tooltip formatter={(v: number, n: string) => (n === "GPS km" ? `${number(v, 0)} km` : n === "₹ / km" ? rupees(v) : `${number(v, 2)} ${n === "Mixed km/kgL" ? "km/kgL" : "km/kg"}`)} />
-                  <Legend />
-                  <Bar yAxisId="km" dataKey="km" name="GPS km" fill="#9fb8d6" />
-                  <Line yAxisId="r" dataKey="cpk" name="₹ / km" stroke="#b45309" strokeWidth={2} connectNulls />
-                  <Line yAxisId="r" dataKey="cng" name="CNG km/kg" stroke="#059669" strokeWidth={2} connectNulls />
-                  <Line yAxisId="r" dataKey="mixed" name="Mixed km/kgL" stroke="#7c3aed" strokeWidth={2} strokeDasharray="5 3" connectNulls />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
+          {/* Three measures with different scales -> three charts, one y-axis each. */}
+          <div className="grid grid-3 trend-grid">
+            {[
+              { title: "GPS km per month", key: "km", kind: "bar" as const, fmt: (x: number) => `${number(x, 0)} km`, tick: (x: number) => number(x, 0) },
+              { title: "Fuel ₹ per km", key: "cpk", kind: "line" as const, fmt: (x: number) => rupees(x), tick: (x: number) => `₹${x}` },
+              { title: "CNG mileage", key: "cng", kind: "line" as const, fmt: (x: number) => `${number(x, 2)} km/kg`, tick: (x: number) => String(x) },
+            ].map((c) => (
+              <Card key={c.key} title={`${c.title} · last 12 months`}>
+                <div className="chart-box small-chart">
+                  <ResponsiveContainer>
+                    <ComposedChart data={trendData}>
+                      <CartesianGrid {...grid} />
+                      <XAxis dataKey="month" {...axis} />
+                      <YAxis {...axis} width={52} tickFormatter={c.tick} />
+                      <Tooltip {...tooltip} formatter={(x: number) => [c.fmt(x), c.title]} />
+                      {c.kind === "bar"
+                        ? <Bar dataKey={c.key} fill={SERIES_1} name={c.title} {...bar} />
+                        : <Line dataKey={c.key} stroke={SERIES_1} strokeWidth={2} dot={{ r: 4, strokeWidth: 2, fill: "#fff" }} name={c.title} connectNulls />}
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+            ))}
+          </div>
           <Tabs<View> value={view} onChange={setView} tabs={[
             { key: "", label: "All", count: rows.length },
             { key: "OK", label: "Calculated", count: count("OK") },

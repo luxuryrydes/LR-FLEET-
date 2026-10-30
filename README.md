@@ -12,7 +12,7 @@ millions of historical rows.
 | `worker/` | Python 3.12, pandas, openpyxl, xlrd, Pydantic, psycopg | Background jobs: reads Excel/CSV, detects headers, maps columns, normalises registrations, flags duplicates and invalid rows, writes staging rows and error rows, builds the GPS-vs-fuel coverage workbook. It never writes final mileage or money figures. |
 | `frontend/` | React 18, TypeScript, Vite, TanStack Query, Recharts | Dashboard, lists with server-side paging, import wizard, entry forms, vehicle history, alerts, reports, users and settings |
 | `spec/` | JSON | Shared, hand-calculated test cases used by the Java, Python **and** TypeScript tests, so the three can't drift apart |
-| `docs/` | Markdown | [Calculation rules](docs/CALCULATION_RULES.md) · [Import spec](docs/IMPORT_SPEC.md) · [API](docs/API.md) · [Deployment](docs/DEPLOYMENT.md) · [Backup & recovery](docs/BACKUP_RECOVERY.md) |
+| `docs/` | Markdown | [Calculation rules](docs/CALCULATION_RULES.md) · [Import spec](docs/IMPORT_SPEC.md) · [API](docs/API.md) · [Deployment](docs/DEPLOYMENT.md) · [Sharing](docs/SHARING.md) · [Backup & recovery](docs/BACKUP_RECOVERY.md) |
 
 ## Go live (GitHub → Vercel + Render + Supabase)
 
@@ -40,6 +40,10 @@ opens http://localhost:5173.
 
 These are local development defaults, created only when the database has no users. Change the password under
 **Users & roles**. To start over with an empty database, close the windows and delete the `data` folder.
+
+**Share with colleagues:** keep `run-local.cmd` running and double-click **`share-online.cmd`**. It prints a `https://` link
+through a Cloudflare Tunnel. It won't start while an admin still uses the default password. Full guide:
+[docs/SHARING.md](docs/SHARING.md).
 
 **Monthly mileage calculator:** menu → *Monthly mileage*. Pick a month to see, for every vehicle, the month's fuel expense ÷
 the month's GPS km (₹/km) and km per kg/L (vehicles that bought CNG + petrol show km ÷ (kg + L) as km/kgL), against the expected mileage, plus fleet totals and a 12-month trend (Excel export).
