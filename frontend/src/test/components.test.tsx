@@ -366,12 +366,40 @@ describe("Changing a vehicle's driver or vendor", () => {
     expect(screen.getByRole("button", { name: "+ New vendor" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "+ New driver" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "+ New department" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Driver")).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText("Vendor"), "9");
     expect(screen.getByLabelText("Driver type")).toHaveValue("VENDOR");
+    expect(screen.queryByLabelText("Driver")).not.toBeInTheDocument();          // a vendor vehicle has no LR driver box
     expect(screen.getByText(/No longer an LR driver/)).toBeInTheDocument();
     expect(screen.getByLabelText("Change applies from")).toHaveValue("2026-10-01");
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ vendorId: 9, currentDriverId: null, operatorType: "VENDOR", gpsKmTracked: false,
       ownershipType: "VENDOR_ATTACHED", effectiveDate: "2026-10-01" }));
+  });
+});
+
+
+describe("Vendor vehicles in the lists", () => {
+  it("shows 0 km with a Vendor tag in the vehicle register", async () => {
+    const { api } = await import("../lib/api");
+    const { VehiclesPage } = await import("../pages/Vehicles");
+    const page = { total: 2, page: 0, size: 25, items: [
+      { id: 1, registrationNumber: "HR55BF0779", make: "Maruti", model: "Ciaz", fuelType: "CNG", categoryCode: "SEDAN", ownershipType: "VENDOR_ATTACHED",
+        vendorName: "Pawan Kumar", operatorType: "VENDOR", gpsKmTracked: false, status: "ACTIVE" },
+      { id: 2, registrationNumber: "DL1CAH7243", make: "Maruti", model: "Dzire", fuelType: "CNG", categoryCode: "SEDAN", ownershipType: "OWNED",
+        driverName: "RAMESH", operatorType: "OWN_DRIVER", gpsKmTracked: true, status: "ACTIVE" },
+    ] };
+    const spy = vi.spyOn(api, "get").mockImplementation(async () => page as never);
+    wrap(
+      <authModule.AuthContext.Provider value={{ user: { id: 1, email: "u@x", fullName: "U", roles: ["VIEWER"] }, loading: false, login: vi.fn(), logout: vi.fn() }}>
+        <VehiclesPage />
+      </authModule.AuthContext.Provider>,
+    );
+    const vendorRow = (await screen.findByText("HR55BF0779")).closest("tr") as HTMLElement;
+    expect(vendorRow.querySelector(".tag-vendor")).toHaveTextContent("Vendor");
+    expect(vendorRow.textContent).toContain("0 km");
+    const ownRow = screen.getByText("DL1CAH7243").closest("tr") as HTMLElement;
+    expect(ownRow.querySelector(".tag-vendor")).toBeNull();
+    spy.mockRestore();
   });
 });

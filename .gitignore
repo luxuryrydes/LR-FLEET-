@@ -27,3 +27,7 @@ data/
 .DS_Store
 Thumbs.db
 .tools/
+
+# data backups and personal copies never go to GitHub or the zip
+lr-fleet-backup-*.zip
+*.backup

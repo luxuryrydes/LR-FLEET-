@@ -192,17 +192,20 @@ export function VehicleForm({ initial, editing, onSubmit, busy, serverError, hel
             <Select value={d.vendorId} onChange={pickVendor} placeholder="None" aria-label="Vendor"
                     options={vehicleVendors.map((v) => ({ value: String(v.id), label: v.name }))} />
           </Field>
-          <Field label="Driver" hint={addLink("driver", "New driver")}>
-            <Select value={d.currentDriverId} onChange={pickDriver} placeholder="Unassigned" aria-label="Driver"
-                    options={(lk?.drivers ?? []).map((v) => ({ value: String(v.id), label: `${v.fullName}${v.phone ? ` · ${v.phone}` : ""}` }))} />
-          </Field>
+          {/* A vendor vehicle has no LR driver: the box comes back when the driver type is changed to an LR driver. */}
+          {d.operatorType !== "VENDOR" && (
+            <Field label="Driver" hint={addLink("driver", "New driver")}>
+              <Select value={d.currentDriverId} onChange={pickDriver} placeholder="Unassigned" aria-label="Driver"
+                      options={(lk?.drivers ?? []).map((v) => ({ value: String(v.id), label: `${v.fullName}${v.phone ? ` · ${v.phone}` : ""}` }))} />
+            </Field>
+          )}
           <Field label="Department" hint={can(user, "manage") ? addLink("department", "New department") : undefined}>
             <Select value={d.currentDepartmentId} onChange={setV("currentDepartmentId")} placeholder="Unassigned" aria-label="Department"
                     options={(lk?.departments ?? []).map((v) => ({ value: String(v.id), label: v.name }))} />
           </Field>
           <Field label="Driver type" hint="Who drives the vehicle">
             <Select value={d.operatorType} aria-label="Driver type"
-                    onChange={(v) => setD({ ...d, operatorType: v, gpsKmTracked: v === "OWN_DRIVER" })}
+                    onChange={(v) => setD({ ...d, operatorType: v, gpsKmTracked: v === "OWN_DRIVER", ...(v === "VENDOR" ? { currentDriverId: "" } : {}) })}
                     options={codes(lk?.operatorTypes ?? ["OWN_DRIVER", "VENDOR", "GOVT_DRIVER", "OFFICER", "PERSONAL", "NONE"])} />
           </Field>
           <Field label="GPS km" hint="Only vehicles driven by LR's own drivers should be imported">

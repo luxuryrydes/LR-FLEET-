@@ -1,79 +1,265 @@
+
 @echo off
 rem ==========================================================================
-rem  LR Fleet Manager - LIVE on this PC, published through your Cloudflare Tunnel
-rem  Starts (minimised, each restarts itself if it stops):
-rem    API + database, import worker, website (built), Cloudflare connection.
-rem  Before the first run: run-local.cmd once (installs everything), change the
-rem  admin password, and save your tunnel token - see docs\GO-LIVE.md
-rem  stop-live.cmd stops everything. install-autostart.cmd starts it at sign-in.
-rem  Do not run run-local.cmd at the same time (same ports and database).
+rem LR Fleet Manager - PRODUCTION LIVE
+rem
+rem Starts:
+rem   1. API + database
+rem   2. Import worker
+rem   3. Production website on localhost:4173
+rem
+rem Cloudflare:
+rem   Uses the EXISTING cloudflared Windows service.
+rem   Does NOT install or start another Cloudflare tunnel.
+rem
+rem Public routes are configured separately in Cloudflare:
+rem   fleet.lrbilling.in  -> http://localhost:4173
+rem   billing.lrbilling.in -> http://localhost:4000
+rem
+rem Before first use:
+rem   Run run-local.cmd once to install dependencies and initialize database.
+rem   Change the default administrator password.
+rem
+rem Do not run run-local.cmd while production is running.
+rem Use stop-live.cmd to stop the Fleet Manager application.
 rem ==========================================================================
+
 setlocal EnableExtensions
 cd /d "%~dp0"
+
 set "ROOT=%~dp0"
 set "AUTO=%~1"
 set "LOGS=%ROOT%data\logs"
+
 if not exist "%LOGS%" mkdir "%LOGS%"
-call "%ROOT%live\env.cmd" || goto :fail
+
+rem ---- Load production environment -----------------------------------------
+
+call "%ROOT%live\env.cmd"
+if errorlevel 1 goto :fail
+
 if exist "%ROOT%data\live.stop" del "%ROOT%data\live.stop"
 
-if not exist "%ROOT%.tools\cloudflare-tunnel-token.txt" (
-  echo No tunnel token yet. Save it in .tools\cloudflare-tunnel-token.txt - see docs\GO-LIVE.md
-  goto :fail
-)
-if not exist "%ROOT%.tools\cloudflared.exe" (
-  echo Downloading Cloudflare Tunnel ^(cloudflared^) from github.com/cloudflare...
-  curl.exe -L --fail -o "%ROOT%.tools\cloudflared.exe" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" || goto :fail
-)
+rem ---- Check whether the application is already running -------------------
 
 curl.exe -s -o nul --fail http://localhost:8080/actuator/health
+
 if not errorlevel 1 (
-  echo The app is already running. Use stop-live.cmd first to restart it.
-  goto :fail
+    echo.
+    echo LR Fleet Manager is already running.
+    echo Run stop-live.cmd before restarting.
+    goto :fail
 )
 
-echo [%date% %time%] Building the API... >> "%LOGS%\live.log"
-echo Building the API ^(about a minute^)...
-call mvn -q -f "%ROOT%backend\pom.xml" -Plocal -DskipTests package > "%LOGS%\build-api.log" 2>&1 || (echo API build failed - see data\logs\build-api.log & goto :fail)
-echo Building the website...
+rem ---- Build API -----------------------------------------------------------
+
+echo.
+echo ============================================================
+echo             LR FLEET MANAGER - PRODUCTION
+echo ============================================================
+echo.
+echo Building API. Please wait...
+echo [%date% %time%] Building API >> "%LOGS%\live.log"
+
+call mvn -q -f "%ROOT%backend\pom.xml" -Plocal -DskipTests package > "%LOGS%\build-api.log" 2>&1
+
+if errorlevel 1 (
+    echo.
+    echo ERROR: API build failed.
+    echo Check data\logs\build-api.log
+    goto :fail
+)
+
+rem ---- Build website -------------------------------------------------------
+
+echo.
+echo Building production website...
+
 set "VITE_API_BASE_URL="
-call npm --prefix "%ROOT%frontend" run build > "%LOGS%\build-web.log" 2>&1 || (echo Website build failed - see data\logs\build-web.log & goto :fail)
+
+call npm --prefix "%ROOT%frontend" run build > "%LOGS%\build-web.log" 2>&1
+
+if errorlevel 1 (
+    echo.
+    echo ERROR: Website build failed.
+    echo Check data\logs\build-web.log
+    goto :fail
+)
+
+rem ---- Start API and database ----------------------------------------------
+
+echo.
+echo Starting API and database...
 
 start "LR Fleet LIVE - API" /min cmd /c ""%ROOT%live\api.cmd""
-echo Starting the API and database...
-set /a N=0
-:waitapi
-ping -n 4 127.0.0.1 >nul
-set /a N+=1
-curl.exe -s -o nul --fail http://localhost:8080/actuator/health && goto :apiup
-if %N% GEQ 100 (echo The API did not start - see data\logs\api.log & goto :fail)
-goto :waitapi
-:apiup
-start "LR Fleet LIVE - Import worker" /min cmd /c ""%ROOT%live\worker.cmd""
-start "LR Fleet LIVE - Website" /min cmd /c ""%ROOT%live\web.cmd""
 
-rem ---- never publish while an admin still has a published default password
-curl.exe -s http://localhost:8080/api/system/share-check > "%TEMP%\lrfleet-share-check.txt"
-findstr /c:"\"defaultAdminPassword\":false" "%TEMP%\lrfleet-share-check.txt" >nul
-if errorlevel 1 (
-  echo [%date% %time%] NOT published: an admin still uses a default password >> "%LOGS%\live.log"
-  echo.
-  echo  The app runs on this PC ^(http://localhost:4173^) but is NOT published:
-  echo  an admin account still uses a default password such as Admin@12345.
-  echo  Change it under Users ^& roles, then run stop-live.cmd and start-live.cmd again.
-  goto :fail
+rem ---- Wait for API --------------------------------------------------------
+
+set /a N=0
+
+:waitapi
+
+ping -n 4 127.0.0.1 >nul
+
+set /a N+=1
+
+curl.exe -s -o nul --fail http://localhost:8080/actuator/health
+
+if not errorlevel 1 goto :apiup
+
+if %N% GEQ 100 (
+    echo.
+    echo ERROR: API did not start.
+    echo Check data\logs\api.log
+    goto :fail
 )
 
-start "LR Fleet LIVE - Cloudflare" /min cmd /c ""%ROOT%live\tunnel.cmd""
-echo [%date% %time%] Live: API, worker, website and Cloudflare started >> "%LOGS%\live.log"
+goto :waitapi
+
+:apiup
+
 echo.
-echo  LR Fleet Manager is LIVE on your Cloudflare address.
-echo  On this PC: http://localhost:4173   Logs: data\logs
-echo  The minimised "LR Fleet LIVE" windows must stay open. stop-live.cmd stops them.
+echo API is running successfully.
+
+rem ---- Verify administrator password before starting website --------------
+
+echo.
+echo Checking administrator security settings...
+
+curl.exe -s --fail -o "%TEMP%\lrfleet-share-check.txt" http://localhost:8080/api/system/share-check
+
+if errorlevel 1 goto :sharecheck_failed
+
+findstr /c:"\"defaultAdminPassword\":false" "%TEMP%\lrfleet-share-check.txt" >nul
+
+if errorlevel 1 goto :default_password
+
+echo Administrator security check passed.
+
+rem ---- Start import worker -------------------------------------------------
+
+echo.
+echo Starting import worker...
+
+start "LR Fleet LIVE - Import worker" /min cmd /c ""%ROOT%live\worker.cmd""
+
+rem ---- Start production website --------------------------------------------
+
+echo.
+echo Starting production website on port 4173...
+
+start "LR Fleet LIVE - Website" /min cmd /c ""%ROOT%live\web.cmd""
+
+rem ---- Wait for website ----------------------------------------------------
+
+set /a W=0
+
+:waitweb
+
+ping -n 2 127.0.0.1 >nul
+
+set /a W+=1
+
+curl.exe -s -o nul --fail http://localhost:4173
+
+if not errorlevel 1 goto :webup
+
+if %W% GEQ 30 (
+    echo.
+    echo ERROR: Production website did not start on port 4173.
+    echo Check data\logs\web.log
+    goto :fail
+)
+
+goto :waitweb
+
+:webup
+
+rem ---- Check existing Cloudflare service -----------------------------------
+
+echo.
+echo Checking existing Cloudflare Windows service...
+
+sc query cloudflared | findstr /I "RUNNING" >nul
+
+if errorlevel 1 (
+    echo WARNING: Cloudflare service is not running.
+    echo Check the Cloudflare Windows service before using the public domain.
+) else (
+    echo Existing Cloudflare service is running.
+)
+
+rem ---- Production started --------------------------------------------------
+
+echo [%date% %time%] API, worker and production website started >> "%LOGS%\live.log"
+
+echo.
+echo ============================================================
+echo             LR FLEET MANAGER STARTED
+echo ============================================================
+echo.
+echo Local production website:
+echo http://localhost:4173
+echo.
+echo API health:
+echo http://localhost:8080/actuator/health
+echo.
+echo Cloudflare:
+echo Existing Windows Cloudflare service is being used.
+echo.
+echo Public address:
+echo https://fleet.lrbilling.in
+echo.
+echo Billing Expo:
+echo Existing route remains unchanged.
+echo https://billing.lrbilling.in
+echo.
+echo Logs:
+echo %LOGS%
+echo.
+echo Keep the LR Fleet LIVE windows running.
+echo Use stop-live.cmd to stop the application.
+echo ============================================================
+echo.
+
 if /i not "%AUTO%"=="auto" pause
+
 exit /b 0
 
+rem ---- Default administrator password detected ----------------------------
+
+:default_password
+
+echo.
+echo SECURITY CHECK FAILED.
+echo.
+echo An administrator is still using a default password.
+echo The production website has NOT been started.
+echo.
+echo Start run-local.cmd, sign in and change the administrator password.
+echo Then close the local application, run stop-live.cmd and retry.
+echo.
+
+goto :fail
+
+rem ---- Security endpoint unavailable --------------------------------------
+
+:sharecheck_failed
+
+echo.
+echo ERROR: Could not verify administrator security settings.
+echo The production website has NOT been started.
+echo Check the API and data\logs\api.log.
+echo.
+
+goto :fail
+
+rem ---- Startup failure -----------------------------------------------------
+
 :fail
+
 echo [%date% %time%] start-live failed >> "%LOGS%\live.log"
+
 if /i not "%AUTO%"=="auto" pause
+
 exit /b 1

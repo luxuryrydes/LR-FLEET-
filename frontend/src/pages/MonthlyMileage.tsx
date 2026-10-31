@@ -183,7 +183,10 @@ export function MonthlyMileagePage() {
                       {manager && <td className="check-col"><SelectOne sel={sel} v={pickV(r)} /></td>}
                       <td><strong className="mono">{r.registrationNumber}</strong><div className="muted small">{r.vehicle} · {label(r.operatorType)}</div></td>
                       <td>{label(r.fuelType)}</td>
-                      <td className="num" style={{ textAlign: "right" }}>{number(r.km, 0)}</td>
+                      <td className="num nowrap" style={{ textAlign: "right" }}>
+                        {r.operatorType === "VENDOR" && !Number(r.km) ? "0" : number(r.km, 0)}
+                        {r.operatorType === "VENDOR" && <span className="tag-vendor">Vendor</span>}
+                      </td>
                       <td className="num" style={{ textAlign: "right" }}>
                         {[r.cngKg && `${number(r.cngKg, 2)} kg CNG`, r.petrolL && `${number(r.petrolL, 2)} L petrol`, r.dieselL && `${number(r.dieselL, 2)} L diesel`,
                           r.electricityKwh && `${number(r.electricityKwh, 1)} kWh`].filter(Boolean).join(" + ") || "—"}
@@ -198,7 +201,8 @@ export function MonthlyMileagePage() {
                         {r.variancePct === null ? "—" : `${Number(r.variancePct) > 0 ? "+" : ""}${number(r.variancePct, 1)}%`}
                       </td>
                       <td><Badge value={r.belowExpected ? "HIGH" : r.status}
-                                 text={r.belowExpected ? "Below expected" : r.status === "IMPLAUSIBLE" ? "Implausible — check fuel records" : label(r.status)} /></td>
+                                 text={r.belowExpected ? "Below expected" : r.status === "IMPLAUSIBLE" ? "Implausible — check fuel records"
+                                   : r.operatorType === "VENDOR" && r.status === "NO_KM" ? "Vendor — km not counted" : label(r.status)} /></td>
                       {manager && <td><DeleteVehicleButton v={pickV(r)} /></td>}
                     </tr>
                   ))}

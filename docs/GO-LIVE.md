@@ -18,15 +18,17 @@ The live start refuses to publish while an admin still has a default password.
 
 **3. Create the tunnel in Cloudflare.** You need a free Cloudflare account with your domain added to it.
 1. Cloudflare dashboard → **Zero Trust** → **Networks** → **Tunnels** → **Create a tunnel** → *Cloudflared* → name it `lr-fleet`.
-2. On *Install and run a connector*, choose Windows and copy the long token: the text after `--token`.
-   Save it as a single line in **`.tools\cloudflare-tunnel-token.txt`** in the app folder. Keep it private.
-   The `.tools` folder is never uploaded to GitHub.
+2. On *Install and run a connector*, choose Windows and run the command Cloudflare shows in an **administrator** command
+   prompt (`cloudflared.exe service install <token>`). That installs the connector as a **Windows service**: it starts with
+   Windows and keeps all your public hostnames online, for example `fleet.lrbilling.in` and `billing.lrbilling.in`, from
+   one connection. `start-live.cmd` uses this service and never starts a second tunnel.
 3. **Public hostname** → subdomain `fleet`, your domain, type **HTTP**, URL **`localhost:4173`** → Save.
 4. (Recommended) **Access** → **Applications** → *Self-hosted* → `fleet.yourcompany.com` → allow only your colleagues' email
    addresses. Cloudflare then emails them a code before they even see the sign-in page.
 
-**4. Start it.** Double-click **`start-live.cmd`**. It builds the latest version and starts four minimised
-*LR Fleet LIVE* windows: API + database, import worker, website, and Cloudflare. Your address works within a minute.
+**4. Start it.** Double-click **`start-live.cmd`**. It builds the latest version and starts three minimised
+*LR Fleet LIVE* windows: API + database, import worker and website (port 4173). It checks that the Cloudflare service is
+running. The website is not started while an admin still has a default password.
 
 **5. Make it automatic.** Double-click **`install-autostart.cmd`**:
 * LR Fleet starts by itself whenever you sign in to Windows.
@@ -63,4 +65,5 @@ Don't run `run-local.cmd` while the live app is running: they use the same datab
 * Logins are signed with a secret created on this PC (`data\jwt-secret.txt`). Keep the `data` folder private.
 * Every change is in the *Audit log* with the user and their IP address.
 * The database and API are reachable only on this PC. Only the website goes through Cloudflare.
-* A backup contains all fleet data and uploaded scans. Store it somewhere private.
+* A backup contains all fleet data and uploaded scans. Store it somewhere private and **outside the app folder** (backups in
+  the app folder are never added to GitHub or the update zip, but they don't belong there either).

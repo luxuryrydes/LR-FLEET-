@@ -77,7 +77,9 @@ export function VehiclesPage() {
           { key: "department", header: "Department", sortable: true, render: (r) => r.departmentName ?? "—" },
           { key: "driverName", header: "Driver / vendor", render: (r) => r.driverName ?? r.vendorName ?? "—" },
           { key: "operatorType", header: "Driver type", render: (r) => <>{label(r.operatorType)}{r.assignmentLabel && <span className="muted small"> ({r.assignmentLabel})</span>}</> },
-          { key: "gpsKmTracked", header: "GPS km", render: (r) => r.gpsKmTracked ? <Badge value="OK" text="imported" /> : <Badge value="DUPLICATE" text="not imported" /> },
+          { key: "gpsKmTracked", header: "GPS km", render: (r) => r.operatorType === "VENDOR"
+              ? <span className="num nowrap">0 km <span className="tag-vendor">Vendor</span></span>
+              : r.gpsKmTracked ? <Badge value="OK" text="imported" /> : <Badge value="DUPLICATE" text="not imported" /> },
           { key: "expectedMileage", header: "Expected mileage", align: "right", render: (r) => number(r.expectedMileage, 2) },
           { key: "status", header: "Status", sortable: true, render: (r) => <><Badge value={r.status} />{r.disposalDate && <span className="muted small"> {date(r.disposalDate)}</span>}
             {r.status === "DELETED" && <div className="muted small">{date(r.deletedAt)}{r.deleteReason ? ` · ${r.deleteReason}` : ""}</div>}</> },

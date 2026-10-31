@@ -364,3 +364,7 @@ tr.row-picked td { background: #fff7f7; }
 .login-page { background: radial-gradient(1200px 600px at 10% 10%, #24518f 0%, transparent 60%), linear-gradient(135deg, #0f2443, #16365f); }
 .login-card { border-radius: 18px; padding: 32px; }
 .small-chart { height: 210px !important; }
+
+/* small tag beside the km of vendor vehicles (their GPS km are not counted) */
+.tag-vendor { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px; font-size: 10.5px; font-weight: 650; letter-spacing: 0.03em;
+  text-transform: uppercase; background: var(--purple-bg); color: var(--purple); vertical-align: 1px; }
