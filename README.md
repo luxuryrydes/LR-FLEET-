@@ -41,7 +41,12 @@ opens http://localhost:5173.
 These are local development defaults, created only when the database has no users. Change the password under
 **Users & roles**. To start over with an empty database, close the windows and delete the `data` folder.
 
-**Share with colleagues:** keep `run-local.cmd` running and double-click **`share-online.cmd`**. It prints a `https://` link
+**Go live from this PC (your own domain, Cloudflare Tunnel):** follow [docs/GO-LIVE.md](docs/GO-LIVE.md). In short:
+1. Save your Cloudflare tunnel token in `.tools\cloudflare-tunnel-token.txt`.
+2. Run `start-live.cmd`.
+3. Run `install-autostart.cmd` once, so the app starts at Windows sign-in and backs up every night.
+
+**Share with colleagues (quick, temporary link):** keep `run-local.cmd` running and double-click **`share-online.cmd`**. It prints a `https://` link
 through a Cloudflare Tunnel. It won't start while an admin still uses the default password. Full guide:
 [docs/SHARING.md](docs/SHARING.md).
 

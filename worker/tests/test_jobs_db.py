@@ -175,3 +175,50 @@ def test_documents_register_reads_every_tab_and_heartbeat(env):
     with conn.cursor() as cur:
         cur.execute("SELECT count(*) AS n FROM worker_heartbeats WHERE worker_id = 'test' AND last_seen > now() - interval '1 minute'")
         assert cur.fetchone()["n"] == 1
+
+
+def test_backup_and_restore_round_trip(env, tmp_path, monkeypatch):
+    from fleet_worker import backup
+
+    conn, storage, tmp = env
+    monkeypatch.setenv("WORKER_DATABASE_URL", URL)
+    with conn.cursor() as cur:
+        cur.execute("""INSERT INTO vehicles (registration_number, registration_normalized, make, model, fuel_type, category_code, ownership_type)
+                       VALUES ('DL1BK0001', 'DL1BK0001', 'Maruti', 'Dzire', 'CNG', 'SEDAN', 'OWNED') RETURNING id""")
+        vid = cur.fetchone()["id"]
+        cur.execute("""INSERT INTO gps_daily_km (vehicle_id, km_date, distance_km, record_mode, source) VALUES (%s, '2026-10-01', 123.45, 'MANUAL', 'MANUAL')""", (vid,))
+    conn.commit()
+    files = tmp_path / "files"
+    (files / "doc").mkdir(parents=True)
+    (files / "doc" / "policy.pdf").write_bytes(b"%PDF-1.4 test")
+    out = tmp_path / "backups"
+    first = backup.create(out, keep=2, files_dir=files)
+    assert first.exists()
+
+    # change everything after the backup: a new vehicle, a deleted km row, a lost file
+    with conn.cursor() as cur:
+        cur.execute("""INSERT INTO vehicles (registration_number, registration_normalized, make, model, fuel_type, category_code, ownership_type)
+                       VALUES ('DL1BK0002', 'DL1BK0002', 'Maruti', 'Dzire', 'CNG', 'SEDAN', 'OWNED')""")
+        cur.execute("DELETE FROM gps_daily_km")
+    conn.commit()
+    (files / "doc" / "policy.pdf").unlink()
+
+    res = backup.restore(first, files)
+    assert res["files"] == 1 and (files / "doc" / "policy.pdf").read_bytes() == b"%PDF-1.4 test"
+    with conn.cursor() as cur:
+        cur.execute("SELECT registration_normalized FROM vehicles ORDER BY id")
+        assert [r["registration_normalized"] for r in cur.fetchall()] == ["DL1BK0001"]
+        cur.execute("SELECT distance_km FROM gps_daily_km")
+        assert str(cur.fetchone()["distance_km"]) == "123.45"
+        # ids continue after the restored rows
+        cur.execute("""INSERT INTO vehicles (registration_number, registration_normalized, make, model, fuel_type, category_code, ownership_type)
+                       VALUES ('DL1BK0003', 'DL1BK0003', 'Maruti', 'Dzire', 'CNG', 'SEDAN', 'OWNED') RETURNING id""")
+        assert cur.fetchone()["id"] > vid
+    conn.commit()
+
+    # only the newest `keep` backups stay
+    import shutil
+    for stamp in ("2026-01-01_0100", "2026-01-02_0100"):
+        shutil.copy(first, out / f"lr-fleet-backup-{stamp}.zip")
+    backup.create(out, keep=2, files_dir=None)
+    assert len([p for p in out.iterdir() if p.name.startswith("lr-fleet-backup-")]) == 2

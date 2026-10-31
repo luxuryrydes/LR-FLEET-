@@ -28,6 +28,9 @@ Colleagues sign in with **their own user**. Create one for each person under *Us
 
 ## A permanent address (optional)
 
+For everyday live use with your own domain, auto-start and nightly backups, use **[GO-LIVE.md](GO-LIVE.md)** (`start-live.cmd`).
+The steps below are the short version for `share-online.cmd`.
+
 The free link changes every time and has no uptime guarantee. For a fixed address such as `fleet.yourcompany.com`, you need a free
 Cloudflare account and your domain on Cloudflare:
 
