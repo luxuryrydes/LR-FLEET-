@@ -36,6 +36,13 @@ The live start refuses to publish while an admin still has a default password.
 Keep the PC on and awake: *Settings → System → Power → Sleep: Never (when plugged in)*. After a restart (e.g. Windows Update),
 sign in to Windows and the app starts again.
 
+## If sign-in shows "Invalid CORS request" or an "Almost there" page
+
+Your Cloudflare hostname points to the **developer** website (`localhost:5173`, from `run-local.cmd`). In the Cloudflare dashboard
+(Zero Trust → Networks → Tunnels → your tunnel → *Public hostname*), change the service to **HTTP `localhost:4173`**. Then close the
+`run-local.cmd` windows and start **`start-live.cmd`**. The developer website refuses all Cloudflare traffic on purpose: it is not
+safe to put online.
+
 ## Everyday
 
 | Need | Do |
