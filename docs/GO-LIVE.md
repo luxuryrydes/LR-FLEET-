@@ -38,6 +38,13 @@ running. The website is not started while an admin still has a default password.
 Keep the PC on and awake: *Settings → System → Power → Sleep: Never (when plugged in)*. After a restart (e.g. Windows Update),
 sign in to Windows and the app starts again.
 
+## If the address shows Cloudflare "Error 1033"
+
+The tunnel has no connector online. Usually the token the Windows service uses belongs to a tunnel that was deleted
+(`cloudflared` logs "Tunnel not found"). In Cloudflare open the tunnel you keep → *Configure* → *Windows*, copy the command, then
+double-click **`connect-tunnel.cmd`** and paste it. It replaces the service's token (administrator rights asked) and checks the
+connection. Make sure that tunnel has every public hostname you use (`fleet` → `localhost:4173`, `billing` → `localhost:4000`).
+
 ## If sign-in shows "Invalid CORS request" or an "Almost there" page
 
 Your Cloudflare hostname points to the **developer** website (`localhost:5173`, from `run-local.cmd`). In the Cloudflare dashboard
