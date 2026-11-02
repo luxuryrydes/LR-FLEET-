@@ -67,7 +67,7 @@ second free **web service**, `lr-fleet-worker-free`. It answers a health check o
    a quiet spell waits about a minute while the worker wakes up.
 
 **"Reading the file…" never finishes:** no import worker is running. The import screen says so, and `GET /api/worker/status` shows
-`"online": false`. Locally, keep the *LR Fleet - Import worker* window open (start `run-local.cmd` again if it was closed).
+`"online": false`. Locally, keep the `run-local.cmd` window open (start it again if it was closed).
 On Render, check that the worker service is deployed and its log shows `worker … started`. The queued file then continues by
 itself.
 

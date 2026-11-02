@@ -18,7 +18,7 @@ if "%FOLDER%"=="" set "FOLDER=%DEFAULT%"
 if not exist "%FOLDER%" mkdir "%FOLDER%" || (echo Could not create that folder. & pause & exit /b 1)
 > "%ROOT%data\backup-folder.txt" echo %FOLDER%
 
-schtasks /create /f /tn "LR Fleet Live" /sc onlogon /rl limited /tr "\"%ROOT%start-live.cmd\" auto" >nul || goto :fail
+schtasks /create /f /tn "LR Fleet Live" /sc onlogon /rl limited /tr "\"%ROOT%run-local.cmd\" -Auto" >nul || goto :fail
 schtasks /create /f /tn "LR Fleet Backup" /sc daily /st 23:30 /rl limited /tr "\"%ROOT%backup-now.cmd\" auto" >nul || goto :fail
 echo.
 echo Done:

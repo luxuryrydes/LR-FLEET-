@@ -12,7 +12,7 @@ millions of historical rows.
 | `worker/` | Python 3.12, pandas, openpyxl, xlrd, Pydantic, psycopg | Background jobs: reads Excel/CSV, detects headers, maps columns, normalises registrations, flags duplicates and invalid rows, writes staging rows and error rows, builds the GPS-vs-fuel coverage workbook. It never writes final mileage or money figures. |
 | `frontend/` | React 18, TypeScript, Vite, TanStack Query, Recharts | Dashboard, lists with server-side paging, import wizard, entry forms, vehicle history, alerts, reports, users and settings |
 | `spec/` | JSON | Shared, hand-calculated test cases used by the Java, Python **and** TypeScript tests, so the three can't drift apart |
-| `docs/` | Markdown | [Calculation rules](docs/CALCULATION_RULES.md) · [Import spec](docs/IMPORT_SPEC.md) · [API](docs/API.md) · [Deployment](docs/DEPLOYMENT.md) · [Sharing](docs/SHARING.md) · [Backup & recovery](docs/BACKUP_RECOVERY.md) |
+| `docs/` | Markdown | [Calculation rules](docs/CALCULATION_RULES.md) · [Import spec](docs/IMPORT_SPEC.md) · [API](docs/API.md) · [Deployment](docs/DEPLOYMENT.md) · [Going live](docs/GO-LIVE.md) · [Backup & recovery](docs/BACKUP_RECOVERY.md) |
 
 ## Go live (GitHub → Vercel + Render + Supabase)
 
@@ -26,29 +26,23 @@ Render as Docker services, and Supabase provides PostgreSQL plus private file st
 4. **Vercel**: import the repo with the root directory unchanged (`vercel.json` builds `frontend/`) and set `VITE_API_BASE_URL` to the Render API URL.
 5. Sign in with the bootstrap admin, create users, and start importing.
 
-## Run locally on Windows (no Docker, no PostgreSQL install)
-Double-click **`run-local.cmd`**. You need Python 3.11+ and Node.js 20+ installed. Java 21 and Maven are downloaded
-into `.tools\` automatically the first time.
+## Run on this PC (one click)
+Double-click **`run-local.cmd`**. You need Python 3.11+ and Node.js 20+ installed; Java 21 and Maven are downloaded into
+`.tools\` automatically the first time. In one window it:
 
-The launcher starts a private PostgreSQL (data kept in `data\`), the API, the import worker and the website, then
-opens http://localhost:5173.
+1. checks the project, installs what is missing and rebuilds only what changed;
+2. starts the API with its private PostgreSQL (data in `data\`) and the import worker, or reuses them if already running;
+3. starts the live website on http://localhost:4173 (or reuses it);
+4. checks the Cloudflare Tunnel Windows service and starts it if it stopped (it never creates a tunnel or asks for a token);
+5. confirms that https://fleet.lrbilling.in really shows the app, and prints a status summary.
 
-| Local sign-in | |
-|---|---|
-| Email | `admin@lrtaxi.local` |
-| Password | `Admin@12345` |
+If a part crashes it is restarted (up to 3 times). Stop with **`stop-local.cmd`**, Ctrl+C, or by closing the window: the
+database is closed safely each way. Logs are in `data\logs\`. Logins are signed with a secret created on this PC
+(`data\jwt-secret.txt`). While an administrator still has a default password (`Admin@12345` is the first-run default), the
+website opens on this PC only and the public address shows a "Not open yet" page.
 
-These are local development defaults, created only when the database has no users. Change the password under
-**Users & roles**. To start over with an empty database, close the windows and delete the `data` folder.
-
-**Go live from this PC (your own domain, Cloudflare Tunnel):** follow [docs/GO-LIVE.md](docs/GO-LIVE.md). In short:
-1. Save your Cloudflare tunnel token in `.tools\cloudflare-tunnel-token.txt`.
-2. Run `start-live.cmd`.
-3. Run `install-autostart.cmd` once, so the app starts at Windows sign-in and backs up every night.
-
-**Share with colleagues (quick, temporary link):** keep `run-local.cmd` running and double-click **`share-online.cmd`**. It prints a `https://` link
-through a Cloudflare Tunnel. It won't start while an admin still uses the default password. Full guide:
-[docs/SHARING.md](docs/SHARING.md).
+Going live, the one-time Cloudflare setup and auto-start: **[docs/GO-LIVE.md](docs/GO-LIVE.md)**.
+Developers: `dev-local.cmd` runs the live-reloading developer website on http://localhost:5173 (this PC only).
 
 **Monthly mileage calculator:** menu → *Monthly mileage*. Pick a month to see, for every vehicle, the month's fuel expense ÷
 the month's GPS km (₹/km) and km per kg/L (vehicles that bought CNG + petrol show km ÷ (kg + L) as km/kgL), against the expected mileage, plus fleet totals and a 12-month trend (Excel export).

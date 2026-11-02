@@ -1,70 +1,60 @@
 # Going live from this PC with Cloudflare Tunnel
 
-The app runs on this PC and your colleagues open it at your own address, for example `https://fleet.yourcompany.com`.
-Cloudflare carries the traffic; nothing on your router or firewall is opened. Vercel and Render are not needed.
+The app runs on this PC and colleagues open it at **https://fleet.lrbilling.in**. Cloudflare carries the traffic; nothing on
+your router or firewall is opened.
 
 ```
-Colleague's browser ──https──▶ Cloudflare ──tunnel──▶ this PC: website (port 4173) ──▶ API + database (port 8080)
+Colleague's browser ──https──▶ Cloudflare ──tunnel──▶ this PC: website (port 4173) ──▶ API + database (ports 8080, 54329)
 ```
 
-## One-time setup
+## Every day
 
-**1. Install the app once.** Double-click `run-local.cmd` and wait until the website opens. That installs Java, Maven, Python and
-website packages, and creates the database. Then close its windows.
-
-**2. Change the admin password.** Start `run-local.cmd` again, sign in, go to *Users & roles*, edit the admin user and set a strong
-password. Create a user for each colleague (VIEWER, OPERATOR, MANAGER or ADMIN). Close the windows.
-The live start refuses to publish while an admin still has a default password.
-
-**3. Create the tunnel in Cloudflare.** You need a free Cloudflare account with your domain added to it.
-1. Cloudflare dashboard → **Zero Trust** → **Networks** → **Tunnels** → **Create a tunnel** → *Cloudflared* → name it `lr-fleet`.
-2. On *Install and run a connector*, choose Windows and run the command Cloudflare shows in an **administrator** command
-   prompt (`cloudflared.exe service install <token>`). That installs the connector as a **Windows service**: it starts with
-   Windows and keeps all your public hostnames online, for example `fleet.lrbilling.in` and `billing.lrbilling.in`, from
-   one connection. `start-live.cmd` uses this service and never starts a second tunnel.
-3. **Public hostname** → subdomain `fleet`, your domain, type **HTTP**, URL **`localhost:4173`** → Save.
-4. (Recommended) **Access** → **Applications** → *Self-hosted* → `fleet.yourcompany.com` → allow only your colleagues' email
-   addresses. Cloudflare then emails them a code before they even see the sign-in page.
-
-**4. Start it.** Double-click **`start-live.cmd`**. It builds the latest version and starts three minimised
-*LR Fleet LIVE* windows: API + database, import worker and website (port 4173). It checks that the Cloudflare service is
-running. The website is not started while an admin still has a default password.
-
-**5. Make it automatic.** Double-click **`install-autostart.cmd`**:
-* LR Fleet starts by itself whenever you sign in to Windows.
-* The data is backed up every night at 23:30. It asks for a folder; choose a OneDrive or Google Drive folder so a copy leaves
-  this PC. The last 14 backups are kept.
-
-Keep the PC on and awake: *Settings → System → Power → Sleep: Never (when plugged in)*. After a restart (e.g. Windows Update),
-sign in to Windows and the app starts again.
-
-## If the address shows Cloudflare "Error 1033"
-
-The tunnel has no connector online. Usually the token the Windows service uses belongs to a tunnel that was deleted
-(`cloudflared` logs "Tunnel not found"). In Cloudflare open the tunnel you keep → *Configure* → *Windows*, copy the command, then
-double-click **`connect-tunnel.cmd`** and paste it. It replaces the service's token (administrator rights asked) and checks the
-connection. Make sure that tunnel has every public hostname you use (`fleet` → `localhost:4173`, `billing` → `localhost:4000`).
-
-## If sign-in shows "Invalid CORS request" or an "Almost there" page
-
-Your Cloudflare hostname points to the **developer** website (`localhost:5173`, from `run-local.cmd`). In the Cloudflare dashboard
-(Zero Trust → Networks → Tunnels → your tunnel → *Public hostname*), change the service to **HTTP `localhost:4173`**. Then close the
-`run-local.cmd` windows and start **`start-live.cmd`**. The developer website refuses all Cloudflare traffic on purpose: it is not
-safe to put online.
-
-## Everyday
+Double-click **`run-local.cmd`** and keep its window open (it can be minimised). It starts everything, checks the tunnel and
+confirms the public address works. To stop, double-click **`stop-local.cmd`**, press Ctrl+C in the window, or close it.
+The database is closed safely each way. Never end Java from Task Manager.
 
 | Need | Do |
 |---|---|
-| Stop the app | `stop-live.cmd` |
-| Start it again / after an update | `stop-live.cmd`, then `start-live.cmd` (it rebuilds the new version) |
+| Start, or start again after an update | `run-local.cmd` (it rebuilds what changed) |
+| Stop | `stop-local.cmd` |
 | Back up right now | `backup-now.cmd` (the app must be running) |
 | Restore a backup | `restore-backup.cmd`. **All current data is replaced**: drag the backup zip in, type YES, then restart the app |
-| Something is wrong | Look in `data\logs`: `api.log`, `worker.log`, `web.log`, `tunnel.log`, `live.log`, `backup.log` |
-| Remove auto-start | `uninstall-autostart.cmd` (data and backups are kept) |
+| Something is wrong | Read the summary in the `run-local` window, or `data\logs\` (`run-local.log`, `api.log`, `worker.log`, `web.log`) |
 
-Each part restarts itself if it stops, and the Cloudflare connection reconnects by itself after an internet drop.
-Don't run `run-local.cmd` while the live app is running: they use the same database and ports.
+Running `run-local.cmd` again while the app runs starts nothing twice: it reuses what is running and only checks.
+`start-live.cmd` and `stop-live.cmd` still work and simply call the two files above.
+
+## One-time setup (already done on the main PC)
+
+1. **Install the app.** Double-click `run-local.cmd`. The first run downloads Java and Maven into `.tools\` and installs the
+   packages.
+2. **Change the admin password.** Until every administrator has a strong password, the website opens on this PC only
+   (http://localhost:4173) and the public address shows "Not open yet". Sign in, go to *Users & roles*, change it, then start
+   `run-local.cmd` again. Create a user for each colleague (VIEWER, OPERATOR, MANAGER or ADMIN).
+3. **Connect the tunnel.** Double-click **`connect-tunnel.cmd`** (it asks for administrator rights). If the Cloudflare service is
+   already connected it changes nothing. Otherwise paste the command from Cloudflare (*Zero Trust → Networks → Tunnels → your
+   tunnel → Configure → Windows*). It installs the Windows service `cloudflared`: it starts with Windows, reconnects after an
+   internet drop, and Windows restarts it if it stops. The token stays in Windows' protected service file, never in this
+   folder. One service serves every hostname on the tunnel, so Fleet and Billing Expo share it.
+4. **Routes in Cloudflare** (*your tunnel → Routes*): `fleet.lrbilling.in` → `http://localhost:4173` (no `/` at the end) and
+   `billing.lrbilling.in` → `http://localhost:4000`. Each hostname's DNS record (CNAME, Proxied) must point at that same tunnel:
+   `<tunnel-id>.cfargotunnel.com`.
+5. **(Optional) Start at sign-in and nightly backups:** double-click `install-autostart.cmd`. It asks for a backup folder
+   (choose OneDrive or Google Drive so a copy leaves this PC) and keeps the last 14 backups. `uninstall-autostart.cmd` removes it.
+6. **(Recommended)** Cloudflare *Access → Applications → Self-hosted* → `fleet.lrbilling.in` → allow only your colleagues' emails.
+
+Keep the PC on and awake: *Settings → System → Power → Sleep: Never (when plugged in)*.
+
+## If the public address does not work
+
+`run-local.cmd` says which part fails. In short:
+
+| You see | Meaning | Fix |
+|---|---|---|
+| Error **1033** / HTTP 530 | The DNS record points at a tunnel with no connector on this PC | Point the `fleet` CNAME at the tunnel the service runs, or run `connect-tunnel.cmd` with that tunnel's command |
+| HTTP **502** | The tunnel reaches this PC but nothing answers | Start `run-local.cmd`; make sure the route is `http://localhost:4173` |
+| "Not open yet" | An administrator still has a default password | Change it on this PC, then start `run-local.cmd` again |
+| "Almost there" / "Invalid CORS request" | The route points at the developer website (5173) | Set the route to `http://localhost:4173` |
 
 ## Safety
 
@@ -72,5 +62,4 @@ Don't run `run-local.cmd` while the live app is running: they use the same datab
 * Logins are signed with a secret created on this PC (`data\jwt-secret.txt`). Keep the `data` folder private.
 * Every change is in the *Audit log* with the user and their IP address.
 * The database and API are reachable only on this PC. Only the website goes through Cloudflare.
-* A backup contains all fleet data and uploaded scans. Store it somewhere private and **outside the app folder** (backups in
-  the app folder are never added to GitHub or the update zip, but they don't belong there either).
+* A backup contains all fleet data and uploaded scans. Store it somewhere private and outside the app folder.
