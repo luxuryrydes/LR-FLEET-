@@ -1,4 +1,6 @@
-import { useEffect, type ReactNode } from "react";
+import { motion } from "framer-motion";
+import { useEffect, useId, type ReactNode } from "react";
+import { EASE, SPRING } from "./motion";
 import { ApiError } from "../lib/api";
 import { label } from "../lib/format";
 
@@ -32,7 +34,8 @@ export function ErrorBox({ error }: { error: unknown }) {
   if (!error) return null;
   const e = error as ApiError;
   return (
-    <div className="alert alert-error" role="alert">
+    <motion.div className="alert alert-error" role="alert" initial={{ opacity: 0, x: 0 }} animate={{ opacity: 1, x: [0, -6, 6, -3, 3, 0] }}
+                transition={{ duration: 0.4, ease: EASE }}>
       <strong>{e.message ?? "Something went wrong"}</strong>
       {e.fieldErrors && e.fieldErrors.length > 0 && (
         <ul>
@@ -43,12 +46,16 @@ export function ErrorBox({ error }: { error: unknown }) {
           ))}
         </ul>
       )}
-    </div>
+    </motion.div>
   );
 }
 
 export function Notice({ kind = "info", children }: { kind?: "info" | "warning" | "success" | "error"; children: ReactNode }) {
-  return <div className={`alert alert-${kind}`}>{children}</div>;
+  return (
+    <motion.div className={`alert alert-${kind}`} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: EASE }}>
+      {children}
+    </motion.div>
+  );
 }
 
 export function Spinner({ text = "Loading…" }: { text?: string }) {
@@ -123,26 +130,29 @@ export function Modal({ title, onClose, children, footer }: { title: string; onC
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
   return (
-    <div className="modal-backdrop" onMouseDown={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(e) => e.stopPropagation()}>
+    <motion.div className="modal-backdrop" onMouseDown={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18 }}>
+      <motion.div className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(e) => e.stopPropagation()}
+                  initial={{ opacity: 0, scale: 0.96, y: 14 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={SPRING}>
         <div className="modal-head">
           <h2>{title}</h2>
           <button className="btn-icon" onClick={onClose} aria-label="Close">×</button>
         </div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
 export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { key: T; label: string; count?: number }[]; value: T; onChange: (k: T) => void }) {
+  const underline = useId();   // each tab strip has its own sliding underline
   return (
     <div className="tabs" role="tablist">
       {tabs.map((t) => (
         <button key={t.key} role="tab" aria-selected={value === t.key} className={value === t.key ? "tab active" : "tab"} onClick={() => onChange(t.key)}>
           {t.label}
           {t.count !== undefined && <span className="tab-count">{t.count}</span>}
+          {value === t.key && <motion.span layoutId={underline} className="tab-underline" transition={SPRING} />}
         </button>
       ))}
     </div>

@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { can, useAuth, type Permission } from "../lib/auth";
 import { label } from "../lib/format";
 import { Icon } from "./Icon";
+import { PageTransition, SPRING, usePressFeedback } from "./motion";
 
 const NAV: { to: string; label: string; icon: string; perm?: Permission; section?: string }[] = [
   { to: "/", label: "Dashboard", icon: "dashboard", section: "Overview" },
@@ -26,6 +28,7 @@ export function Layout() {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
+  usePressFeedback();
   const current = [...NAV].reverse().find((n) => (n.to === "/" ? pathname === "/" : pathname.startsWith(n.to)));
   return (
     <div className={`shell ${open ? "nav-open" : ""}`}>
@@ -42,8 +45,14 @@ export function Layout() {
             <div key={n.to}>
               {n.section && <div className="nav-section">{n.section}</div>}
               <NavLink to={n.to} end={n.to === "/"} className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
-                <span className="nav-icon" aria-hidden="true"><Icon name={n.icon} /></span>
-                {n.label}
+                {({ isActive }) => (
+                  <>
+                    {/* the highlight slides from the old item to the new one */}
+                    {isActive && <motion.span layoutId="nav-active" className="nav-active-bg" transition={SPRING} />}
+                    <span className="nav-icon" aria-hidden="true"><Icon name={n.icon} /></span>
+                    <span className="nav-text">{n.label}</span>
+                  </>
+                )}
               </NavLink>
             </div>
           ))}
@@ -65,7 +74,9 @@ export function Layout() {
           <button className="btn btn-small" onClick={logout}><Icon name="logout" size={15} /> Sign out</button>
         </header>
         <main className="content">
-          <Outlet />
+          <PageTransition id={pathname}>
+            <Outlet />
+          </PageTransition>
         </main>
       </div>
     </div>

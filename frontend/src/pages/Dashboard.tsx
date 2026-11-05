@@ -11,6 +11,10 @@ import { useUrlFilters } from "../lib/useUrlFilters";
 import { FilterBar } from "../components/FilterBar";
 import { Icon } from "../components/Icon";
 import { ErrorBox, Spinner } from "../components/ui";
+import { CountUp, riseItem, Stagger } from "../components/motion";
+import { motion } from "framer-motion";
+
+const MotionLink = motion(Link);
 
 interface Kpis {
   period: { from: string; to: string };
@@ -43,12 +47,12 @@ function greeting() {
 
 function HeroTile({ icon, label, value, sub, to, tint }: { icon: string; label: string; value: string; sub?: string; to: string; tint: string }) {
   return (
-    <Link className="kpi hero-tile" to={to}>
+    <MotionLink className="kpi hero-tile" to={to} variants={riseItem}>
       <span className="kpi-icon" style={{ background: `${tint}1a`, color: tint }}><Icon name={icon} size={20} /></span>
       <div className="kpi-label">{label}</div>
-      <div className="kpi-value">{value}</div>
+      <div className="kpi-value"><CountUp text={value} /></div>
       {sub && <div className="kpi-sub">{sub}</div>}
-    </Link>
+    </MotionLink>
   );
 }
 
@@ -59,7 +63,7 @@ function AttentionItem({ icon, label, hint, count, to, tone }: { icon: string; l
     <Link className={`attention-item tone-${t}`} to={to}>
       <span className="attention-icon"><Icon name={count === 0 ? "check" : icon} size={16} strokeWidth={2.2} /></span>
       <span className="attention-text"><strong>{label}</strong><span>{count === 0 ? "All clear" : hint}</span></span>
-      <span className="attention-count">{number(count, 0)}</span>
+      <span className="attention-count"><CountUp text={number(count, 0)} /></span>
       <Icon name="arrow" size={15} />
     </Link>
   );
@@ -120,7 +124,7 @@ export function DashboardPage() {
       {kpis.isLoading && <Spinner />}
       {k && v && (
         <>
-          <div className="hero-kpis">
+          <Stagger className="hero-kpis">
             <HeroTile icon="route" tint="#2a78d6" label="Kilometres travelled" value={`${number(k.totalKm, 0)} km`}
                       sub={`${number(k.vehiclesWithGps, 0)} vehicles with GPS data`} to={`/gps?${s()}`} />
             <HeroTile icon="fuel" tint="#eb6834" label="Fuel & energy spend" value={wholeRupees(k.totalFuelExpense)}
@@ -132,7 +136,7 @@ export function DashboardPage() {
                       to={`/reports?report=fuel-cost-per-km&${s()}`} />
             <HeroTile icon="wrench" tint="#5b3fc4" label="Maintenance spend" value={wholeRupees(k.maintenanceExpense)}
                       sub="Service and repair bills" to={`/maintenance?${s()}`} />
-          </div>
+          </Stagger>
 
           <div className="dash-row">
             <section className="card fleet-card">

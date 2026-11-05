@@ -1,4 +1,6 @@
+import { motion } from "framer-motion";
 import type { ReactNode } from "react";
+import { EASE } from "./motion";
 import type { Row } from "../lib/api";
 import { Empty, Spinner } from "./ui";
 import { SelectAll, SelectOne, type Picked, type Selection } from "./VehicleDelete";
@@ -59,7 +61,8 @@ export function DataTable({ columns, rows, loading, total, page = 0, size = 25, 
           </thead>
           <tbody>
             {rows?.map((r, i) => (
-              <tr key={rowKey ? rowKey(r, i) : (r.id as number) ?? i} onClick={onRowClick ? () => onRowClick(r) : undefined}
+              <motion.tr key={rowKey ? rowKey(r, i) : (r.id as number) ?? i} onClick={onRowClick ? () => onRowClick(r) : undefined}
+                  initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, ease: EASE, delay: Math.min(i, 14) * 0.018 }}
                   className={[onRowClick ? "clickable" : "", select && select.sel.has(select.pick(r).id) ? "row-picked" : ""].join(" ").trim() || undefined}>
                 {select && <td className="check-col"><SelectOne sel={select.sel} v={select.pick(r)} /></td>}
                 {columns.map((c) => (
@@ -67,7 +70,7 @@ export function DataTable({ columns, rows, loading, total, page = 0, size = 25, 
                     {c.render ? c.render(r) : r[c.key] ?? "—"}
                   </td>
                 ))}
-              </tr>
+              </motion.tr>
             ))}
           </tbody>
         </table>
