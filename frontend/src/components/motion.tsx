@@ -7,6 +7,8 @@ export const SPRING = { type: "spring", stiffness: 420, damping: 32, mass: 0.8 }
 
 /** Each page fades and rises in when the route changes. */
 export function PageTransition({ id, children }: { id: string; children: ReactNode }) {
+  // a new page always opens at its top, not at the scroll position of the page before
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [id]);
   return (
     <motion.div key={id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.32, ease: EASE }}>
       {children}

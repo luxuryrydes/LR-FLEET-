@@ -426,3 +426,97 @@ tr.row-picked td { background: #fff7f7; }
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
   .spin { animation-duration: 0.8s !important; animation-iteration-count: infinite !important; }
 }
+
+/* =====================================================================================================================
+   BOLD THEME (Figma: LR Fleet Manager - Design System) — banner headers, gradient buttons, tinted tiles, navy tables
+   ===================================================================================================================== */
+body { background:
+  radial-gradient(900px 420px at 100% -10%, rgba(37, 99, 184, 0.10), transparent 60%),
+  radial-gradient(700px 360px at -10% 110%, rgba(245, 180, 0, 0.08), transparent 60%),
+  var(--bg); background-attachment: fixed; }
+
+/* ---- every page opens with a navy banner ---- */
+.page-header { position: relative; overflow: hidden; align-items: center; padding: 26px 28px; border-radius: 18px; margin-bottom: 22px; color: #fff;
+  background: linear-gradient(120deg, #0b1e3a 0%, #13305a 45%, #1f5aa6 100%); box-shadow: 0 18px 40px -22px rgba(11, 30, 58, 0.7); }
+.page-header::before { content: ""; position: absolute; width: 380px; height: 380px; right: -90px; top: -200px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(245, 180, 0, 0.35), rgba(245, 180, 0, 0) 65%); pointer-events: none; }
+.page-header::after { content: ""; position: absolute; left: 28px; bottom: 0; width: 64px; height: 4px; border-radius: 4px 4px 0 0; background: var(--accent); }
+.page-header > * { position: relative; }
+.page-header h1, .dash-header h1 { color: #fff; font-size: 28px; letter-spacing: -0.02em; }
+.page-header p, .page-header .muted { color: #c3d2e8 !important; }
+.page-header strong { color: #fff; }
+.page-header a:not(.btn) { color: var(--accent-2); }
+.page-header .btn { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.28); color: #fff; backdrop-filter: blur(4px); }
+.page-header .btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.2); border-color: rgba(255, 255, 255, 0.5); }
+.page-header .btn-primary, .page-header .btn-accent { background: linear-gradient(180deg, #ffd04d, var(--accent)); border-color: var(--accent); color: var(--accent-ink);
+  box-shadow: 0 10px 24px -10px rgba(245, 180, 0, 0.9); }
+.page-header .btn-primary:hover:not(:disabled), .page-header .btn-accent:hover:not(:disabled) { background: linear-gradient(180deg, #ffdb70, #ffc21a); border-color: #ffc21a; }
+.page-header .btn-danger { background: var(--red); border-color: var(--red); }
+
+/* ---- buttons: gradients, rounder, clearer ---- */
+.btn { border-radius: 10px; }
+.btn-primary { background: linear-gradient(180deg, #2a6ac4 0%, var(--primary) 100%); border-color: #164480; }
+.btn-primary:hover:not(:disabled) { background: linear-gradient(180deg, #3478d6 0%, #1d56a0 100%); }
+.btn-accent { background: linear-gradient(180deg, #ffd04d 0%, var(--accent) 100%); border-color: #e0a500; }
+.btn-danger { background: linear-gradient(180deg, #d6443d 0%, var(--red) 100%); border-color: #a3241f; }
+
+/* ---- cards: coloured top edge, roomier heading ---- */
+.card { position: relative; border-radius: 16px; overflow: hidden; }
+.card::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: linear-gradient(90deg, var(--primary-2), #5b8fd8 60%, var(--accent)); opacity: 0.9; }
+.card-head h2 { font-size: 16px; }
+.card-head h2 svg { color: var(--primary-2); }
+
+/* ---- number tiles: tinted, bigger, coloured by meaning ---- */
+.kpi { border-radius: 16px; padding: 18px 18px 16px; background: linear-gradient(160deg, #ffffff 0%, #f4f8fe 100%); border-color: #dfe7f3; }
+.kpi::after { content: ""; position: absolute; right: -30px; top: -30px; width: 110px; height: 110px; border-radius: 50%; background: rgba(37, 99, 184, 0.07); pointer-events: none; }
+.kpi-value { font-size: 27px; font-weight: 800; }
+.kpi.good { background: linear-gradient(160deg, #ffffff 0%, #e9f8f1 100%); border-color: #c9ebdb; }
+.kpi.warn { background: linear-gradient(160deg, #ffffff 0%, #fff4dc 100%); border-color: #f6dfa7; }
+.kpi.bad { background: linear-gradient(160deg, #ffffff 0%, #fdebea 100%); border-color: #f5c9c6; }
+.kpi.good::after { background: rgba(18, 128, 92, 0.08); }
+.kpi.warn::after { background: rgba(245, 180, 0, 0.12); }
+.kpi.bad::after { background: rgba(194, 48, 42, 0.08); }
+.hero-tile .kpi-value { font-size: 30px; }
+.kpi-icon { width: 42px; height: 42px; border-radius: 12px; }
+.hero-tile:nth-child(1) { background: linear-gradient(160deg, #ffffff 0%, #e8f1fd 100%); }
+.hero-tile:nth-child(2) { background: linear-gradient(160deg, #ffffff 0%, #fdeee6 100%); }
+.hero-tile:nth-child(3) { background: linear-gradient(160deg, #ffffff 0%, #e6f6ef 100%); }
+.hero-tile:nth-child(4) { background: linear-gradient(160deg, #ffffff 0%, #efeafd 100%); }
+
+/* ---- tables: navy header, striped rows ---- */
+.table-wrap { border-radius: 16px; border-color: #dfe7f3; }
+.table th { background: linear-gradient(180deg, #13305a, #0f2749); color: #dbe6f5; border-bottom: 2px solid var(--accent); letter-spacing: 0.05em; }
+.table th .th-sort { color: #dbe6f5; }
+.table th .sort-ind { color: #7f9cc4; }
+.table tbody tr:nth-child(even) td { background: #f8fafd; }
+.table tbody tr:hover td { background: #edf3fc; }
+.table tr.clickable:hover td { background: var(--primary-soft); box-shadow: inset 0 0 0 0 transparent; }
+.table tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.doc-matrix th.sticky-col, .svc-table th.sticky-col { background: #0f2749; }
+.pager { background: linear-gradient(180deg, #f8fafd, #eef3fa); }
+
+/* ---- filter bars and tabs ---- */
+.filter-bar, .filters { border-radius: 16px; background: linear-gradient(180deg, #ffffff, #f6f9fd); border-color: #dfe7f3; }
+.tabs { gap: 6px; }
+.tab.active { background: var(--primary-soft); }
+
+/* ---- sidebar: yellow active pill, glowing logo ---- */
+.sidebar { background: linear-gradient(180deg, #0b1e3a 0%, #102a50 55%, #17396b 100%); }
+.brand-mark { border-radius: 12px; box-shadow: 0 8px 22px -6px rgba(245, 180, 0, 0.75); }
+.nav-active-bg { background: linear-gradient(90deg, rgba(245, 180, 0, 0.22), rgba(245, 180, 0, 0.06)); box-shadow: inset 3px 0 0 var(--accent); }
+.nav-link.active .nav-icon { color: var(--accent); }
+.nav-section { color: #f5c74a; opacity: 0.8; }
+
+/* ---- top bar ---- */
+.topbar { background: rgba(255, 255, 255, 0.78); border-bottom: 1px solid rgba(203, 213, 225, 0.7); box-shadow: 0 6px 18px -14px rgba(11, 30, 58, 0.45); }
+.topbar-title { font-size: 15px; color: var(--text); font-weight: 700; }
+.avatar { background: linear-gradient(135deg, #ffd04d, var(--accent)); color: var(--accent-ink); }
+
+/* ---- badges and alerts: a bit stronger ---- */
+.badge { padding: 3px 10px; font-weight: 700; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04); }
+.alert { border-radius: 14px; border-left-width: 4px; }
+
+@media (max-width: 860px) {
+  .page-header { padding: 20px; border-radius: 14px; }
+  .page-header h1 { font-size: 22px; }
+}
